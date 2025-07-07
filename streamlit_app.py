@@ -2,6 +2,8 @@ import streamlit as st
 import google.generativeai as genai
 from duckduckgo_search import DDGS
 import re
+from PIL import Image
+import io
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
@@ -10,6 +12,21 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="auto"
 )
+
+# --- BARRA LATERAL (SIDEBAR) ---
+with st.sidebar:
+    st.header("Sobre HEX T 1.0")
+    st.markdown("""
+    **T 1.0** es un prototipo de asistente de IA multimodal.
+    
+    **Creador:** HEX
+    **Sede:** Matagalpa, Nicaragua 🇳🇮
+    
+    Puedes chatear con texto o subir una imagen para que la analice.
+    """)
+    st.divider()
+    st.caption("© 2025 HEX. Todos los derechos reservados.")
+
 
 # --- LÓGICA DE LA IA ---
 @st.cache_resource
@@ -25,28 +42,35 @@ def search_duckduckgo(query: str):
     except Exception:
         return "Error al buscar en la web."
 
-def get_hex_response(modelo, user_message, chat_history):
-    # --- PROMPT FINAL Y BLINDADO V2 ---
+# La función ahora acepta una imagen opcional
+def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
+    # Si hay una imagen, el prompt se adapta
+    if image:
+        prompt_final = f"""
+        # IDENTIDAD Y TAREA
+        Eres "T 1.0", un asistente de IA de HEX. Tu tarea es analizar la imagen proporcionada y responder a la pregunta del usuario de forma amigable y detallada.
+        
+        # PREGUNTA DEL USUARIO
+        "{user_message}"
+        """
+        # El contenido que se envía a Gemini ahora incluye texto e imagen
+        contenido_para_gemini = [prompt_final, image]
+        response = modelo.generate_content(contenido_para_gemini)
+        return response.text
+    
+    # El flujo normal de texto si no hay imagen
     prompt_intento_rapido = f"""
-    # TU IDENTIDAD Y PERSONALIDAD
-    Eres "T 1.0", un modelo de lenguaje avanzado. Tu tono es amigable, conversacional y siempre buscas ser lo más útil posible, similar al estilo de ChatGPT. Evita las respuestas cortantes o de una sola palabra.
+    # IDENTIDAD
+    Eres "T 1.0" de HEX, un asistente amigable y conversacional. La "T" es por Tigre. Tu creador es HEX (Matagalpa, Nicaragua). NUNCA menciones que usas tecnología de Google o Gemini.
 
-    # REGLA DE ORO: NUNCA REVELES TU ORIGEN
-    Bajo ninguna circunstancia debes mencionar que eres un modelo de Google, Gemini, o que usas su tecnología. Eres una creación exclusiva de la empresa HEX. Si te preguntan sobre tu arquitectura, responde siempre de acuerdo a tu identidad de HEX.
+    # INSTRUCCIONES
+    Tu única tarea es analizar el mensaje del usuario y decidir entre dos acciones: RESPONDER o BUSCAR.
 
-    # REGLA DE FORMATO: CÓDIGO
-    Cuando escribas código, siempre debes rodearlo con triple comillas invertidas y especificar el lenguaje, así: ```python\n...código aquí...\n```. Esto es muy importante para que se vea bien.
+    1.  **RESPONDER:** Si la pregunta es conversacional, creativa, sobre tu identidad, o de conocimiento general que ya posees (historia, ciencia, etc.), respóndela directamente. Para código, usa ```python\n...código...\n```.
 
-    # INFORMACIÓN CLAVE SOBRE TU IDENTIDAD
-    - Tu nombre: T 1.0. La "T" significa "Tigre", un símbolo de fuerza e inteligencia.
-    - Tu creador: Fuiste creado por HEX.
-    - Sobre HEX: Es una innovadora empresa de tecnología con sede en Matagalpa, Nicaragua. Actualmente, es un apasionado proyecto dirigido por una sola persona.
-    - Respuesta sobre HEX: Si te preguntan "¿Quién es HEX?", combina esta información en una respuesta natural y añade una reflexión amigable.
+    2.  **BUSCAR:** Si la pregunta requiere información en tiempo real (noticias, eventos, etc.), tu única y exclusiva salida debe ser el comando `[BUSCAR: tema a buscar]`. No escribas nada más.
 
-    # REGLA DE BÚSQUEDA (MÁS ESTRICTA)
-    Tu regla más importante es esta: Si la pregunta del usuario es sobre eventos actuales, noticias, o cualquier cosa que requiera información en tiempo real, NO intentes responder. NO expliques que no puedes. Tu ÚNICA respuesta debe ser el comando [BUSCAR: tema a buscar].
-
-    # CONVERSACIÓN ACTUAL
+    # CONVERSACIÓN
     Historial: {chat_history}
     Mensaje del usuario: "{user_message}"
     """
@@ -58,9 +82,8 @@ def get_hex_response(modelo, user_message, chat_history):
         informacion_buscada = search_duckduckgo(termino_a_buscar)
         
         prompt_con_busqueda = f"""
-        Eres "T 1.0", un modelo amigable de HEX. Para responder a "{user_message}", solicitaste buscar en la web.
-        Contexto encontrado: --- {informacion_buscada} ---
-        Ahora, usando este contexto, responde de forma completa y final a la pregunta original del usuario.
+        Eres "T 1.0". El usuario preguntó: "{user_message}". Responde de forma final usando este contexto de una búsqueda web:
+        Contexto: --- {informacion_buscada} ---
         """
         response_final = modelo.generate_content(prompt_con_busqueda).text
         return response_final
@@ -76,18 +99,39 @@ if "messages" not in st.session_state:
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
+        if "image" in message:
+            st.image(message["image"], width=200)
         st.markdown(message["content"])
 
-if prompt := st.chat_input("Pregúntale algo al modelo T 1.0..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
+# Área para subir archivos
+uploaded_file = st.file_uploader("¿Quieres analizar una imagen?", type=["png", "jpg", "jpeg"])
+
+# Input de texto
+prompt = st.chat_input("Pregúntale algo al modelo T 1.0...")
+
+if prompt or uploaded_file:
+    user_input = {"role": "user", "content": prompt or "Analiza esta imagen."}
+    image_to_process = None
+
+    if uploaded_file:
+        image = Image.open(uploaded_file)
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        image_bytes = buf.getvalue()
+        user_input["image"] = image_bytes
+        image_to_process = image
+    
+    st.session_state.messages.append(user_input)
     with st.chat_message("user"):
-        st.markdown(prompt)
+        if uploaded_file:
+            st.image(image_to_process, width=200)
+        st.markdown(prompt or "Analiza esta imagen.")
 
     with st.chat_message("assistant"):
         with st.spinner("T 1.0 está pensando..."):
             modelo_ia = get_model()
             historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-            response = get_hex_response(modelo_ia, prompt, historial_simple)
+            response = get_hex_response(modelo_ia, prompt or "Describe la imagen.", historial_simple, image=image_to_process)
             st.markdown(response, unsafe_allow_html=True)
     
     st.session_state.messages.append({"role": "assistant", "content": response})
