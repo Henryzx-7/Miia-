@@ -15,7 +15,7 @@ st.set_page_config(
 @st.cache_resource
 def get_model():
     # Obtenemos la clave API de los "Secrets" de Streamlit
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    genai.configure(api_key=st.secrets["AIzaSyAM3ZrUXMPwM8JTlNQPGga0tPvlGOcaHUY"])
     return genai.GenerativeModel('gemini-1.5-flash')
 
 def search_duckduckgo(query: str):
