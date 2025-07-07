@@ -11,13 +11,14 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# --- LÓGICA DE LA IA (ADAPTADA) ---
+# --- LÓGICA DE LA IA ---
+# Esta función se conecta al modelo usando la clave guardada en los Secrets
 @st.cache_resource
 def get_model():
-    # Obtenemos la clave API de los "Secrets" de Streamlit
-    genai.configure(api_key=st.secrets["AIzaSyAM3ZrUXMPwM8JTlNQPGga0tPvlGOcaHUY"])
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     return genai.GenerativeModel('gemini-1.5-flash')
 
+# Función para buscar en la web
 def search_duckduckgo(query: str):
     try:
         with DDGS() as ddgs:
@@ -26,7 +27,9 @@ def search_duckduckgo(query: str):
     except Exception:
         return "Error al buscar en la web."
 
+# Función principal que genera la respuesta
 def get_hex_response(modelo, user_message, chat_history):
+    # Prompt optimizado que le da a la IA la herramienta de búsqueda
     prompt_intento_rapido = f"""
     Eres "T 1.0", un modelo de lenguaje de la empresa "HEX". Tu identidad es ser un asistente útil, eficiente y directo.
     REGLA CRÍTICA: Si no sabes la respuesta o necesitas información muy reciente, responde ÚNICA Y EXCLUSIVAMENTE con el comando: [BUSCAR: el tema que necesitas buscar]
@@ -35,8 +38,10 @@ def get_hex_response(modelo, user_message, chat_history):
     Mensaje del usuario: "{user_message}"
     """
     
+    # Primer intento rápido
     primera_respuesta = modelo.generate_content(prompt_intento_rapido).text
     
+    # Si la IA pide buscar, se ejecuta el camino lento
     if "[BUSCAR:" in primera_respuesta:
         termino_a_buscar = re.search(r"\[BUSCAR:\s*(.*?)\]", primera_respuesta).group(1)
         informacion_buscada = search_duckduckgo(termino_a_buscar)
@@ -49,13 +54,14 @@ def get_hex_response(modelo, user_message, chat_history):
         response_final = modelo.generate_content(prompt_con_busqueda).text
         return response_final
     else:
+        # Si no pide buscar, devuelve la respuesta rápida
         return primera_respuesta
 
 # --- INTERFAZ DE STREAMLIT ---
 st.title("🤖 HEX T 1.0")
 st.caption("Un asistente de lenguaje avanzado creado por HEX.")
 
-# Inicializar el historial del chat en la sesión
+# Inicializar el historial del chat
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -66,7 +72,6 @@ for message in st.session_state.messages:
 
 # Input del usuario
 if prompt := st.chat_input("Pregúntale algo al modelo T 1.0..."):
-    # Añadir y mostrar el mensaje del usuario
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -75,10 +80,8 @@ if prompt := st.chat_input("Pregúntale algo al modelo T 1.0..."):
     with st.chat_message("assistant"):
         with st.spinner("T 1.0 está pensando..."):
             modelo_ia = get_model()
-            # Creamos un historial simple para el prompt
             historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
             response = get_hex_response(modelo_ia, prompt, historial_simple)
             st.markdown(response)
     
-    # Añadir la respuesta del asistente al historial
     st.session_state.messages.append({"role": "assistant", "content": response})
