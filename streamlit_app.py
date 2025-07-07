@@ -42,53 +42,48 @@ def search_duckduckgo(query: str):
     except Exception:
         return "Error al buscar en la web."
 
-# La función ahora acepta una imagen opcional
+# Versión final y más robusta de la función de respuesta
 def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
-    # Si hay una imagen, el prompt se adapta
+    # Flujo para imágenes (no cambia)
     if image:
         prompt_final = f"""
-        # IDENTIDAD Y TAREA
-        Eres "T 1.0", un asistente de IA de HEX. Tu tarea es analizar la imagen proporcionada y responder a la pregunta del usuario de forma amigable y detallada.
-        
-        # PREGUNTA DEL USUARIO
-        "{user_message}"
+        Eres "T 1.0" de HEX. Analiza la imagen y responde a la pregunta del usuario de forma amigable y detallada.
+        Pregunta: "{user_message}"
         """
-        # El contenido que se envía a Gemini ahora incluye texto e imagen
         contenido_para_gemini = [prompt_final, image]
         response = modelo.generate_content(contenido_para_gemini)
         return response.text
     
-    # El flujo normal de texto si no hay imagen
-    prompt_intento_rapido = f"""
-    # IDENTIDAD
-    Eres "T 1.0" de HEX, un asistente amigable y conversacional. La "T" es por Tigre. Tu creador es HEX (Matagalpa, Nicaragua). NUNCA menciones que usas tecnología de Google o Gemini.
+    # --- NUEVA LÓGICA PARA TEXTO: BUSCAR SIEMPRE ---
+    
+    # 1. El código ahora siempre busca en la web primero.
+    print(f"🤖 Buscando en la web sobre: '{user_message}'")
+    informacion_buscada = search_duckduckgo(user_message)
+    
+    # 2. Se construye un único prompt que incluye el contexto de la búsqueda.
+    prompt_final = f"""
+    # IDENTIDAD Y PERSONALIDAD
+    Eres "T 1.0" de HEX, un asistente amigable y conversacional. La "T" es por Tigre. Tu creador es HEX (Matagalpa, Nicaragua). NUNCA menciones que usas tecnología de Google o Gemini. Cuando escribas código, usa el formato ```python\n...código...\n```.
+
+    # TAREA
+    Responde a la pregunta del usuario. Para ayudarte, he realizado una búsqueda en la web.
+
+    # CONTEXTO DE LA BÚSQUEDA WEB
+    ---
+    {informacion_buscada}
+    ---
 
     # INSTRUCCIONES
-    Tu única tarea es analizar el mensaje del usuario y decidir entre dos acciones: RESPONDER o BUSCAR.
-
-    1.  **RESPONDER:** Si la pregunta es conversacional, creativa, sobre tu identidad, o de conocimiento general que ya posees (historia, ciencia, etc.), respóndela directamente. Para código, usa ```python\n...código...\n```.
-
-    2.  **BUSCAR:** Si la pregunta requiere información en tiempo real (noticias, eventos, etc.), tu única y exclusiva salida debe ser el comando `[BUSCAR: tema a buscar]`. No escribas nada más.
+    Usa el contexto de la búsqueda si es relevante y útil para responder la pregunta. Si el contexto no ayuda, es irrelevante, o no tiene nada que ver, ignóralo por completo y responde con tu propio conocimiento.
 
     # CONVERSACIÓN
     Historial: {chat_history}
-    Mensaje del usuario: "{user_message}"
+    Pregunta del usuario: "{user_message}"
     """
     
-    primera_respuesta = modelo.generate_content(prompt_intento_rapido).text
-    
-    if "[BUSCAR:" in primera_respuesta:
-        termino_a_buscar = re.search(r"\[BUSCAR:\s*(.*?)\]", primera_respuesta).group(1)
-        informacion_buscada = search_duckduckgo(termino_a_buscar)
-        
-        prompt_con_busqueda = f"""
-        Eres "T 1.0". El usuario preguntó: "{user_message}". Responde de forma final usando este contexto de una búsqueda web:
-        Contexto: --- {informacion_buscada} ---
-        """
-        response_final = modelo.generate_content(prompt_con_busqueda).text
-        return response_final
-    else:
-        return primera_respuesta
+    # 3. Se genera la respuesta en un solo paso.
+    response = modelo.generate_content(prompt_final)
+    return response.text
 
 # --- INTERFAZ DE STREAMLIT ---
 st.title("🤖 HEX T 1.0")
