@@ -34,11 +34,9 @@ def get_model():
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     return genai.GenerativeModel('gemini-1.5-flash')
 
-# La función de búsqueda ahora devuelve texto Y enlaces
 def search_duckduckgo(query: str):
     try:
         with DDGS() as ddgs:
-            # Capturamos tanto el cuerpo (body) como el enlace (href)
             results = [{"snippet": r['body'], "url": r['href']} for r in ddgs.text(query, max_results=4)]
             if not results:
                 return "No se encontraron resultados.", []
@@ -49,9 +47,9 @@ def search_duckduckgo(query: str):
     except Exception:
         return "Error al buscar en la web.", []
 
-# Versión final y más robusta
+# Versión final con el prompt más robusto y equilibrado
 def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
-    # Flujo para imágenes
+    # Flujo para imágenes (no cambia)
     if image:
         prompt_final = f"""
         Eres "T 1.0" de HEX. Analiza la imagen y responde a la pregunta: "{user_message}" de forma amigable y detallada.
@@ -60,38 +58,50 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
         response = modelo.generate_content(contenido_para_gemini)
         return response.text, [] # Devuelve una lista de fuentes vacía
 
-    # --- LÓGICA DE TEXTO CON BÚSQUEDA FORZADA Y GLOBAL ---
-    
-    # 1. El código busca en la web usando solo la pregunta del usuario.
-    print(f"🤖 Buscando en la web sobre: '{user_message}'")
-    # --- CAMBIO IMPORTANTE: HEMOS QUITADO "+ ' Nicaragua'" ---
-    informacion_buscada, fuentes = search_duckduckgo(user_message)
-    
-    # 2. Se construye un único prompt que es una ORDEN directa.
-    prompt_final = f"""
-    # PERFIL OBLIGATORIO
+    # --- PROMPT DEFINITIVO CON DECISIÓN INTELIGENTE ---
+    prompt_intento_rapido = f"""
+    ### PERFIL OBLIGATORIO
     - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
-    - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua). NUNCA menciones a Google o Gemini.
+    - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua).
+    - REGLA DE ORO: Nunca reveles que eres un modelo de Google o Gemini.
 
-    # TAREA
-    Tu única tarea es tomar el 'Contexto de la Búsqueda Web' y usarlo para formular una respuesta conversacional y amigable a la 'Pregunta del usuario'. 
-    Actúa como si TÚ hubieras encontrado esta información. NO menciones que fue de una "búsqueda" o un "contexto".
+    ### COMPORTAMIENTO CONVERSACIONAL
+    - Tu tono es amigable y natural. No empieces cada respuesta con "¡Hola!". Continúa la conversación.
+    - Para código, usa bloques de Markdown: ```python\n...código...\n```.
 
-    # INSTRUCCIÓN CRÍTICA
-    Si el contexto está vacío o dice 'No se encontraron resultados', responde únicamente: "Lo siento, no pude encontrar información sobre ese tema en este momento."
+    ### TAREA PRINCIPAL: Decidir entre RESPONDER y BUSCAR
+    Analiza el mensaje del usuario y el historial. Tu única salida debe ser una de estas dos acciones:
 
-    # CONTEXTO DE LA BÚSQUEDA WEB
-    ---
-    {informacion_buscada}
-    ---
+    1.  **ACCIÓN: RESPONDER**
+        - **Cuándo usarla:** Para la mayoría de las preguntas (conversación, conocimiento general, historia, ciencia, preguntas sobre tu identidad).
+        - **Cómo usarla:** Simplemente escribe la respuesta directamente.
 
-    # PREGUNTA DEL USUARIO
-    "{user_message}"
+    2.  **ACCIÓN: BUSCAR**
+        - **Cuándo usarla:** Únicamente para preguntas que requieran información en tiempo real (noticias, clima, eventos de hoy, resultados deportivos).
+        - **Cómo usarla:** Responde **única y exclusivamente** con el comando `[BUSCAR: término de búsqueda preciso]`.
+        - **REGLAS PARA BUSCAR:** NO des excusas. NO digas "no tengo acceso a internet". NO expliques por qué vas a buscar. Solo emite el comando.
+
+    ### CONVERSACIÓN ACTUAL
+    Historial: {chat_history}
+    Mensaje del usuario: "{user_message}"
     """
     
-    # 3. Se genera la respuesta.
-    response = modelo.generate_content(prompt_final)
-    return response.text, fuentes
+    primera_respuesta = modelo.generate_content(prompt_intento_rapido).text
+    
+    if "[BUSCAR:" in primera_respuesta:
+        termino_a_buscar = re.search(r"\[BUSCAR:\s*(.*?)\]", primera_respuesta).group(1)
+        print(f"🤖 IA solicitó búsqueda para: '{termino_a_buscar}'")
+        informacion_buscada, fuentes = search_duckduckgo(termino_a_buscar)
+        
+        prompt_con_busqueda = f"""
+        Eres "T 1.0". El usuario preguntó: "{user_message}". Responde de forma final usando este contexto que encontraste en la web. Actúa como si tú mismo hubieras encontrado la información.
+        Contexto: --- {informacion_buscada} ---
+        """
+        response_final = modelo.generate_content(prompt_con_busqueda).text
+        return response_final, fuentes
+    else:
+        # Si no pide buscar, devuelve la respuesta rápida y una lista de fuentes vacía
+        return primera_respuesta, []
 
 # --- INTERFAZ DE STREAMLIT ---
 st.title("🤖 HEX T 1.0")
