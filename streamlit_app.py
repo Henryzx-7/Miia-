@@ -7,27 +7,18 @@ import io
 from google.api_core import exceptions as google_exceptions
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(
-    page_title="HEX T 1.0",
-    page_icon="🤖",
-    layout="centered",
-    initial_sidebar_state="auto"
-)
+st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="centered")
 
-# --- BARRA LATERAL (SIDEBAR) ---
+# --- BARRA LATERAL ---
 with st.sidebar:
     st.header("Sobre HEX T 1.0")
     st.markdown("""
     **T 1.0** es un prototipo de asistente de IA multimodal.
-    
     **Creador:** HEX
     **Sede:** Matagalpa, Nicaragua 🇳🇮
-    
-    Puedes chatear con texto o subir una imagen para que la analice.
     """)
     st.divider()
     st.caption("© 2025 HEX. Todos los derechos reservados.")
-
 
 # --- LÓGICA DE LA IA ---
 @st.cache_resource
@@ -39,9 +30,7 @@ def search_duckduckgo(query: str):
     try:
         with DDGS() as ddgs:
             results = [{"snippet": r['body'], "url": r['href']} for r in ddgs.text(query, max_results=4)]
-            if not results:
-                return "No se encontraron resultados.", []
-            
+            if not results: return "No se encontraron resultados.", []
             context_text = "\n".join([r['snippet'] for r in results])
             sources = [r for r in results]
             return context_text, sources
@@ -52,14 +41,12 @@ def search_duckduckgo(query: str):
 def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
     # Flujo para imágenes
     if image:
-        prompt_final = f"""
-        Eres "T 1.0" de HEX. Analiza la imagen y responde a la pregunta: "{user_message}" de forma amigable y detallada.
-        """
+        prompt_final = f'Eres "T 1.0" de HEX. Analiza la imagen y responde a la pregunta: "{user_message}"'
         contenido_para_gemini = [prompt_final, image]
         response = modelo.generate_content(contenido_para_gemini)
-        return response.text, [] # Devuelve una lista de fuentes vacía
+        return response.text, []
 
-    # --- PROMPT DEFINITIVO CON DECISIÓN INTELIGENTE ---
+    # --- PROMPT DEFINITIVO CON DECISIÓN INTELIGENTE Y REGLAS ESTRICTAS ---
     prompt_intento_rapido = f"""
     ### PERFIL OBLIGATORIO
     - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
@@ -67,20 +54,25 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
     - REGLA DE ORO: Nunca reveles que eres un modelo de Google o Gemini.
 
     ### COMPORTAMIENTO CONVERSACIONAL
-    - Tu tono es amigable y natural. No empieces cada respuesta con "¡Hola!". Continúa la conversación fluidamente.
+    - Tu tono es amigable y natural. No empieces cada respuesta con "¡Hola!". Continúa la conversación.
     - Para código, usa bloques de Markdown: ```python\n...código...\n```.
 
     ### TAREA PRINCIPAL: Decidir entre RESPONDER y BUSCAR
-    Analiza el mensaje del usuario y el historial. Tu única salida debe ser una de estas dos acciones:
+    Analiza el mensaje del usuario. Tu respuesta DEBE ser una de estas dos acciones:
 
     1.  **ACCIÓN: RESPONDER**
-        - **Cuándo usarla:** Para la mayoría de las preguntas (conversación, conocimiento general, historia, ciencia, preguntas sobre tu identidad).
-        - **Cómo usarla:** Simplemente escribe la respuesta directamente.
+        - **Cuándo:** Para preguntas conversacionales, conocimiento general, historia, ciencia, o sobre tu identidad.
+        - **Cómo:** Simplemente escribe la respuesta directamente.
 
     2.  **ACCIÓN: BUSCAR**
-        - **Cuándo usarla:** Únicamente para preguntas que requieran información en tiempo real (noticias, clima, eventos de hoy, resultados deportivos).
-        - **Cómo usarla:** Responde **única y exclusivamente** con el comando `[BUSCAR: término de búsqueda preciso]`.
-        - **REGLAS PARA BUSCAR:** NO des excusas. NO digas "no tengo acceso a internet". NO expliques por qué vas a buscar. Solo emite el comando.
+        - **Cuándo:** Solo para preguntas que requieran información en tiempo real (noticias, clima, eventos de hoy, resultados deportivos, etc.).
+        - **Cómo:** Responde **única y exclusivamente** con el comando `[BUSCAR: término de búsqueda preciso]`.
+        - **REGLAS:** NO des excusas. NO digas "no tengo acceso". NO expliques por qué buscas. SOLO emite el comando.
+
+    ### EJEMPLOS
+    - Usuario: "Hola" -> Respuesta: "¡Hola! Soy Tigre. ¿En qué te puedo ayudar?"
+    - Usuario: "Clima en Managua" -> Respuesta: `[BUSCAR: clima actual en Managua Nicaragua]`
+    - Usuario: "Cuéntame un chiste" -> Respuesta: "Claro, aquí tienes uno..."
 
     ### CONVERSACIÓN ACTUAL
     Historial: {chat_history}
@@ -101,7 +93,6 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
         response_final = modelo.generate_content(prompt_con_busqueda).text
         return response_final, fuentes
     else:
-        # Si no pide buscar, devuelve la respuesta rápida y una lista de fuentes vacía
         return primera_respuesta, []
 
 # --- INTERFAZ DE STREAMLIT ---
@@ -113,8 +104,7 @@ if "messages" not in st.session_state:
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        if "image" in message:
-            st.image(message["image"], width=200)
+        if "image" in message: st.image(message["image"], width=200)
         st.markdown(message["content"])
         if message["role"] == "assistant" and "sources" in message and message["sources"]:
             with st.expander("Fuentes Consultadas"):
@@ -138,8 +128,7 @@ if prompt or uploaded_file:
     
     st.session_state.messages.append(user_input)
     with st.chat_message("user"):
-        if uploaded_file:
-            st.image(image_to_process, width=200)
+        if uploaded_file: st.image(image_to_process, width=200)
         st.markdown(prompt or "Analiza esta imagen.")
 
     with st.chat_message("assistant"):
@@ -158,8 +147,7 @@ if prompt or uploaded_file:
                 assistant_message = {"role": "assistant", "content": response_text, "sources": response_sources}
                 st.session_state.messages.append(assistant_message)
             
-            # MANEJO DE ERROR CORREGIDO
             except google_exceptions.ResourceExhausted as e:
-                st.error("⚠️ En este momento hay muchas solicitudes. Por favor, espera uno o dos minutos y vuelve a preguntar.")
+                st.error("⚠️ En este momento hay muchas solicitudes. Por favor, espera un minuto y vuelve a preguntar.")
             except Exception as e:
                 st.error(f"Ha ocurrido un error inesperado: {e}")
