@@ -37,32 +37,28 @@ def search_duckduckgo(query: str):
     except Exception:
         return "Error al buscar en la web.", []
 
-# La función ahora solo tiene UNA tarea: resumir el contexto.
-def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None, web_context: str = None):
-    # Flujo para imágenes (no cambia)
+def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
+    # Flujo para imágenes
     if image:
         prompt_final = f'Eres "T 1.0" de HEX. Analiza la imagen y responde a la pregunta: "{user_message}"'
         response = modelo.generate_content([prompt_final, image])
         return response.text, []
 
-    # Flujo para texto
+    # Flujo para texto con búsqueda
+    informacion_buscada, fuentes = search_duckduckgo(user_message)
     prompt_final = f"""
     # PERFIL OBLIGATORIO
     - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
     - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua). NUNCA menciones a Google o Gemini.
-
     # TAREA
-    Tu única tarea es usar el 'Contexto de la Búsqueda Web' para formular una respuesta amigable a la 'Pregunta del usuario'. Actúa como si TÚ hubieras encontrado esta información.
-
+    Usa el 'Contexto de la Búsqueda Web' para formular una respuesta amigable a la 'Pregunta del usuario'. Actúa como si TÚ hubieras encontrado esta información.
     # INSTRUCCIÓN CRÍTICA
     Si el contexto está vacío, di que no encontraste información sobre ese tema.
-
-    # CONTEXTO DE LA BÚSQUEDA WEB: {web_context}
-    # PREGUNTA DEL USUARIO: "{user_message}"
+    # CONTEXTO: {informacion_buscada}
+    # PREGUNTA: "{user_message}"
     """
-    
     response = modelo.generate_content(prompt_final)
-    return response.text
+    return response.text, fuentes
 
 # --- INTERFAZ DE STREAMLIT ---
 st.title("🤖 HEX T 1.0")
@@ -87,46 +83,50 @@ prompt = st.chat_input("Pregúntale algo a T 1.0...")
 conversational_triggers = ["hola", "cómo estás", "como estas", "gracias", "ok", "vale", "adiós", "buenos días", "buenas tardes", "buenas noches", "que tal", "mucho gusto"]
 
 if prompt or uploaded_file:
-    # Lógica para imágenes
-    # ... (el código de imagen que ya tienes aquí)
+    # Lógica para imágenes (placeholder, asegúrate de tener la tuya completa aquí)
+    image_to_process = None
+    if uploaded_file:
+        image = Image.open(uploaded_file)
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        image_bytes = buf.getvalue()
+        user_input = {"role": "user", "content": prompt or "Analiza esta imagen.", "image": image_bytes}
+        image_to_process = image
+    else:
+        user_input = {"role": "user", "content": prompt}
 
-    # Lógica para texto
-    if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    st.session_state.messages.append(user_input)
+    with st.chat_message("user"):
+        if uploaded_file: st.image(image_to_process, width=200)
+        st.markdown(prompt or "Analiza esta imagen.")
 
-        with st.chat_message("assistant"):
-            response_text = ""
-            response_sources = []
-            
-            # --- NUEVO FILTRO INTELIGENTE ---
-            if any(trigger in prompt.lower().split() for trigger in conversational_triggers):
-                # CAMINO RÁPIDO: Respuesta instantánea sin usar la API
-                response_text = "¡Hola! Soy T 1.0, tu asistente personal. ¿En qué puedo ayudarte hoy?"
-                st.markdown(response_text)
-            else:
-                # CAMINO PROFUNDO: Búsqueda y resumen
-                with st.spinner("T 1.0 está pensando..."):
-                    try:
-                        modelo_ia = get_model()
-                        historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-                        # El código ahora busca primero
-                        informacion_buscada, fuentes = search_duckduckgo(prompt)
-                        # Y luego llama a la IA con el contexto
-                        response_text = get_hex_response(modelo_ia, prompt, historial_simple, web_context=informacion_buscada)
-                        response_sources = fuentes
-                        
-                        st.markdown(response_text)
-                        if response_sources:
-                            with st.expander("Fuentes Consultadas"):
-                                for source in response_sources:
-                                    st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
-                    
-                    except google_exceptions.ResourceExhausted as e:
-                        st.error("⚠️ En este momento hay muchas solicitudes. Por favor, espera un minuto y vuelve a preguntar.")
-                    except Exception as e:
-                        st.error(f"Ha ocurrido un error inesperado: {e}")
+    # Lógica de respuesta
+    with st.chat_message("assistant"):
+        response_text = ""
+        response_sources = []
+        
+        # --- FILTRO INTELIGENTE CORREGIDO ---
+        # Quitamos .split() para que busque la frase completa en el mensaje
+        if prompt and any(trigger in prompt.lower() for trigger in conversational_triggers):
+            # CAMINO RÁPIDO: Respuesta instantánea sin usar la API
+            response_text = "¡Hola! Soy T 1.0, tu asistente personal. ¿En qué puedo ayudarte?"
+            st.markdown(response_text)
+        else:
+            # CAMINO PROFUNDO: Búsqueda y resumen
+            with st.spinner("T 1.0 está pensando..."):
+                try:
+                    modelo_ia = get_model()
+                    historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
+                    response_text, response_sources = get_hex_response(modelo_ia, prompt or "Describe la imagen.", historial_simple, image=image_to_process)
+                    st.markdown(response_text)
+                    if response_sources:
+                        with st.expander("Fuentes Consultadas"):
+                            for source in response_sources:
+                                st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
+                except google_exceptions.ResourceExhausted as e:
+                    st.error("⚠️ En este momento hay muchas solicitudes. Por favor, espera un minuto y vuelve a preguntar.")
+                except Exception as e:
+                    st.error(f"Ha ocurrido un error inesperado: {e}")
 
-            assistant_message = {"role": "assistant", "content": response_text, "sources": response_sources}
-            st.session_state.messages.append(assistant_message)
+        assistant_message = {"role": "assistant", "content": response_text, "sources": response_sources}
+        st.session_state.messages.append(assistant_message)
