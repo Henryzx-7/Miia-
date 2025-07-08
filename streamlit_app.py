@@ -1,9 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
-from PIL import Image
-import io
-from google.api_core import exceptions as google_exceptions
-import random
+from huggingface_hub import InferenceClient
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="centered")
@@ -22,52 +18,53 @@ with st.sidebar:
         st.rerun()
     st.caption("© 2025 HEX. Todos los derechos reservados.")
 
-# --- LÓGICA DE LA IA ---
-@st.cache_resource
-def get_model():
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    return genai.GenerativeModel('gemini-1.5-flash')
-
-def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
-    # --- PROMPT AVANZADO CON FLUJO DE CONVERSACIÓN ---
-    prompt_final = f"""
-    ### PERFIL OBLIGATORIO
-    - Tu nombre de IA es **Tigre**.
-    - Tu designación de modelo y versión actual es **T 1.0**.
-    - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua).
-    - REGLA DE ORO: Nunca reveles que eres un modelo de Google o Gemini.
-
-    ### COMPORTAMIENTO Y PERSONALIDAD
-    - Tu tono es formal, directo y preciso, similar a ChatGPT.
-    - Tu principal limitación es que **NO TIENES ACCESO A INTERNET** y la versión actual **NO PUEDE ANALIZAR IMÁGENES**.
-
-    ### FLUJO DE CONVERSACIÓN ESPECIAL: PROYECTO L-0.1 BETA
-    - **Regla de Activación:** Si el usuario pregunta directamente sobre tu modelo ("T 1.0"), tus capacidades, tus limitaciones, o sobre futuras actualizaciones, tu primera respuesta debe ser esta y solo esta: "Esa es una excelente pregunta. T 1.0 es mi versión actual. Además de mí, mis desarrolladores están trabajando en un nuevo prototipo con capacidades ampliadas. ¿Te gustaría saber más sobre ese proyecto?".
-    - **Regla de Continuación:** Si la respuesta del usuario a tu pregunta anterior es afirmativa (ej: "sí", "claro", "dime más", "ok, quiero saber"), entonces y solo entonces, le darás la siguiente información detallada: "El nuevo proyecto se llama L-0.1 beta. Es un modelo avanzado creado por HEX con capacidades superiores, como analizar hasta 3 imágenes por mensaje (con un límite de 5 mensajes por día), realizar búsquedas web profundas en foros y documentación técnica para dar respuestas más precisas, y una habilidad mejorada para resolver problemas complejos de programación y universitarios."
-
-    ### TAREA PRINCIPAL
-    - Analiza la pregunta del usuario y el historial de conversación.
-    - **Primero**, verifica si debes activar el "FLUJO DE CONVERSACIÓN ESPECIAL".
-    - **Segundo**, si no se activa el flujo especial, verifica si la pregunta requiere acceso a internet o análisis de imágenes. Si es así, responde que esa es una función premium, tal como se describe en el flujo especial.
-    - **Tercero,** si nada de lo anterior aplica, simplemente responde a la pregunta del usuario.
-
-    ### CONVERSACIÓN ACTUAL
-    Historial: {str(chat_history)}
-    Pregunta del usuario: "{user_message}"
-    """
-
-    try:
-        # El flujo de imagen ahora también es interceptado por el prompt
-        if image:
-            return "Esa es una función premium. Para poder buscar en la web y analizar imágenes, necesitarías actualizar al plan de pago."
-
-        response = modelo.generate_content(prompt_final)
-        return response.text
+# --- LÓGICA DE LA IA CON HUGGING FACE ---
+try:
+    if "HUGGINGFACE_API_TOKEN" not in st.secrets:
+        st.error("No se encontró la clave de Hugging Face. Asegúrate de añadirla a los 'Secrets'.")
+        st.stop()
     
-    except google_exceptions.ResourceExhausted:
-        return "⚠️ Límite de solicitudes alcanzado. Por favor, espera un minuto."
+    # Se inicializa el cliente de la API con el token de los secrets
+    client = InferenceClient(
+        model="mistralai/Mistral-7B-Instruct-v0.2",
+        token=st.secrets["HUGGINGFACE_API_TOKEN"]
+    )
+
+except Exception as e:
+    st.error(f"No se pudo inicializar el cliente de la API: {e}")
+    st.stop()
+
+
+def get_hex_response(user_message, chat_history):
+    """
+    Genera una respuesta usando un modelo de Hugging Face.
+    """
+    # Formateamos el prompt para el modelo Mistral
+    messages = [{"role": "system", "content": """
+    ### PERFIL OBLIGATORIO
+    - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
+    - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua).
+    - Eres amigable, cercano y proactivo. Usas emojis 😊.
+    - Tu principal limitación es que NO TIENES ACCESO A INTERNET en tiempo real.
+    
+    ### TAREA
+    Responde a la pregunta del usuario siguiendo tu personalidad. Si te piden algo que requiera buscar en la web (noticias, clima), responde amablemente que esa función no está disponible por ahora y ofrece ayuda con tus otras capacidades (generar ideas, explicar temas, etc.).
+    """}]
+    
+    messages.extend(chat_history)
+    messages.append({"role": "user", "content": user_message})
+    
+    try:
+        # Llamada a la API de Hugging Face
+        response = client.chat_completion(messages=messages, max_tokens=1024, stream=False)
+        return response.choices[0].message.content
     except Exception as e:
+        if "Rate limit reached" in str(e):
+            return "⚠️ Se ha alcanzado el límite de uso gratuito por ahora. Por favor, intenta de nuevo en unos minutos."
+        elif "Model is overloaded" in str(e) or "Model is currently loading" in str(e):
+             return "🤖 El modelo está un poco ocupado o arrancando. Por favor, vuelve a preguntar en un momento."
         return f"Ha ocurrido un error inesperado: {e}"
+
 
 # --- INTERFAZ DE STREAMLIT ---
 st.markdown("<h1 style='text-align: center; font-size: 4em; font-weight: bold;'>HEX</h1>", unsafe_allow_html=True)
@@ -81,39 +78,18 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-uploaded_file = st.file_uploader("Subir imagen (Función Premium)", type=["png", "jpg", "jpeg"])
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
-if prompt or uploaded_file:
-    # Lógica unificada para manejar la entrada
-    user_input_content = prompt
-    if uploaded_file and not prompt:
-        user_input_content = "He subido una imagen para que la analices."
-    
-    st.session_state.messages.append({"role": "user", "content": user_input_content})
-    
-    # Lógica de respuesta
+if prompt:
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
-        st.markdown(user_input_content)
+        st.markdown(prompt)
 
     with st.chat_message("assistant"):
         with st.spinner("T 1.0 está pensando..."):
-            modelo_ia = get_model()
-            historial_simple = [msg for msg in st.session_state.messages]
-            
-            # El flujo de imagen se maneja directamente en la función de respuesta
-            image_to_process = Image.open(uploaded_file) if uploaded_file else None
-
-            response_text = get_hex_response(
-                modelo_ia, 
-                user_input_content, 
-                historial_simple, 
-                image=image_to_process
-            )
-            
+            historial_para_api = st.session_state.messages[:-1]
+            response_text = get_hex_response(prompt, historial_para_api)
             st.markdown(response_text)
             
             assistant_message = {"role": "assistant", "content": response_text}
             st.session_state.messages.append(assistant_message)
-            
-    st.rerun()
