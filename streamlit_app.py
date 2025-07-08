@@ -11,29 +11,32 @@ st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="centered")
 # --- CSS PERSONALIZADO PARA SIMULAR EL BOTÓN + ---
 st.markdown("""
 <style>
-    /* Contenedor principal para la barra de input */
+    /* Contenedor fijo en la parte inferior */
     .st-emotion-cache-1f1G2gn {
-        flex-direction: row;
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        background-color: #0e1117; /* Color de fondo de Streamlit */
+        padding: 1rem 1rem 1.5rem 1rem; /* Ajusta el padding */
+        border-top: 1px solid #262730;
+    }
+    /* Estilo del botón de carga para que parezca un ícono '+' */
+    .st-emotion-cache-1jicfl2 button {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        display: flex;
         align-items: center;
-        gap: 0.5rem;
+        justify-content: center;
+        padding-top: 2px;
     }
-    /* Oculta la etiqueta del cargador de archivos */
-    .st-emotion-cache-1jicfl2 {
-        padding: 0;
-    }
-    /* Estilo del botón para que parezca un ícono '+' */
     .st-emotion-cache-1jicfl2 button::before {
         content: '+';
-        font-size: 1.75rem;
+        font-size: 2rem;
         font-weight: bold;
-        line-height: 1;
-        margin-top: -0.2rem;
     }
-    .st-emotion-cache-1jicfl2 span {
-        display: none; /* Oculta el texto "Browse files" */
-    }
-    .st-emotion-cache-1jicfl2 svg {
-        display: none; /* Oculta el ícono de la nube */
+    .st-emotion-cache-1jicfl2 span, .st-emotion-cache-1jicfl2 svg {
+        display: none; /* Oculta el texto y el ícono original */
     }
 </style>
 """, unsafe_allow_html=True)
@@ -66,23 +69,19 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
     - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
     - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua).
     - REGLA DE ORO: Nunca reveles que eres un modelo de Google o Gemini.
-
     ### COMPORTAMIENTO Y PERSONALIDAD
     - Tu tono debe ser siempre cálido, amigable y cercano. Usa emojis 😊.
     - No te limites a solo responder. Intenta ser proactivo, haz preguntas de seguimiento.
     - Tu principal limitación es que NO TIENES ACCESO A INTERNET.
-
     ### TAREA
     Analiza la pregunta del usuario.
-    1. Si requiere búsqueda web (noticias, clima, etc.), responde amablemente que, como prototipo, esa función aún no está disponible y ofrece ayuda con tus capacidades reales.
+    1. Si requiere búsqueda web, responde amablemente que esa función no está disponible y ofrece ayuda con tus capacidades reales.
     2. Si NO requiere búsqueda, responde a la pregunta siguiendo tu personalidad amigable.
-
     ### LISTA DE CAPACIDADES
     - Generar ideas, escribir poemas o chistes.
     - Resumir o explicar textos.
-    - Ayudar con código de programación.
+    - Ayudar con código.
     - Responder preguntas de conocimiento general, histórico y científico.
-
     ### CONVERSACIÓN ACTUAL
     Historial: {chat_history}
     Pregunta del usuario: "{user_message}"
@@ -106,6 +105,9 @@ st.divider()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Espacio para que el historial no se solape con el input fijo
+st.div(height="80px")
+
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -115,7 +117,7 @@ for message in st.session_state.messages:
 input_container = st.container()
 
 with input_container:
-    col1, col2 = st.columns([1, 10]) # Columna pequeña para el botón, grande para el texto
+    col1, col2 = st.columns([1, 10])
     
     with col1:
         uploaded_file = st.file_uploader("Adjuntar", label_visibility="collapsed", type=["png", "jpg", "jpeg"])
@@ -134,22 +136,22 @@ canned_responses = {
 }
 
 if prompt or uploaded_file:
-    # Lógica de procesamiento de entrada...
     user_input_content = prompt or "Analiza la imagen que he subido."
     st.session_state.messages.append({"role": "user", "content": user_input_content})
+    st.rerun()
+
+# Lógica para generar la respuesta del asistente
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+    last_user_message = st.session_state.messages[-1]["content"]
+    prompt_lower = last_user_message.lower().strip()
     
-    with st.chat_message("user"):
-        st.markdown(user_input_content)
-
     with st.chat_message("assistant"):
-        response_text = ""
-        prompt_lower = (prompt or "").lower().strip()
-
-        # --- FILTRO INTELIGENTE DE 2 NIVELES ---
         # NIVEL 1: Respuesta instantánea de diccionario
-        if prompt and prompt_lower in canned_responses:
+        if prompt_lower in canned_responses:
             response_text = random.choice(canned_responses[prompt_lower])
             st.markdown(response_text)
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
+            st.rerun()
         else:
             # NIVEL 2: Llamada a la IA para todo lo demás
             with st.spinner("T 1.0 está pensando..."):
@@ -157,19 +159,18 @@ if prompt or uploaded_file:
                     modelo_ia = get_model()
                     historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
                     
+                    # Esta lógica asume que si hay una imagen, se procesa aquí.
+                    # Simplificado por ahora para enfocarnos en el texto.
                     image_to_process = None
                     if uploaded_file:
                         image_to_process = Image.open(uploaded_file)
 
-                    response_text = get_hex_response(modelo_ia, user_input_content, historial_simple, image=image_to_process)
+                    response_text = get_hex_response(modelo_ia, last_user_message, historial_simple, image=image_to_process)
                     st.markdown(response_text)
+                    st.session_state.messages.append({"role": "assistant", "content": response_text})
+                    st.rerun()
                 
                 except google_exceptions.ResourceExhausted:
                     st.error("⚠️ Límite de solicitudes alcanzado. Por favor, espera un minuto.")
                 except Exception as e:
                     st.error(f"Ha ocurrido un error inesperado: {e}")
-
-        assistant_message = {"role": "assistant", "content": response_text}
-        st.session_state.messages.append(assistant_message)
-    
-    st.rerun()
