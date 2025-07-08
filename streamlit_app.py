@@ -55,30 +55,23 @@ def get_hex_response(user_message, chat_history):
     """
     Genera una respuesta, decidiendo si necesita buscar en la web primero.
     """
-    # Formateo del historial para la API
-    messages = [
-        {
-            "role": "system",
-            "content": """
-            ### PERFIL OBLIGATORIO
-            - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0. Eres una creación de HEX.
-            - Tu idioma principal y preferido es el español. Responde siempre en español a menos que el usuario escriba en inglés.
+    system_prompt = """
+    ### PERFIL OBLIGATORIO
+    - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0. Eres una creación de HEX.
+    - Tu idioma principal y preferido es el español. Responde siempre en español a menos que el usuario escriba en inglés.
 
-            ### TAREA PRINCIPAL: Decidir si necesitas buscar en la web.
-            - Para conocimiento general, conversación o creatividad, responde directamente.
-            - Para noticias, eventos actuales, clima o datos específicos en tiempo real, responde ÚNICA Y EXCLUSIVAMENTE con el comando `[BUSCAR: término de búsqueda]`.
-
-            ### EJEMPLO
-            - Usuario: "¿Cuál es el clima en Managua?" -> Tu respuesta: `[BUSCAR: clima actual en Managua]`
-            """
-        }
-    ]
-    messages.extend(chat_history)
-    messages.append({"role": "user", "content": user_message})
+    ### TAREA PRINCIPAL: Decidir si necesitas buscar en la web.
+    - Para conocimiento general, conversación o creatividad, responde directamente.
+    - Para noticias, eventos actuales, clima o datos específicos en tiempo real, responde ÚNICA Y EXCLUSIVAMENTE con el comando `[BUSCAR: término de búsqueda]`.
+    """
+    
+    messages_for_decision = [{"role": "system", "content": system_prompt}]
+    messages_for_decision.extend(chat_history)
+    messages_for_decision.append({"role": "user", "content": user_message})
 
     try:
-        # Primera llamada para ver si necesita buscar (usando chat_completion)
-        response = client.chat_completion(messages=messages, max_tokens=150, stream=False)
+        # --- CORRECCIÓN IMPORTANTE: Usamos chat_completion ---
+        response = client.chat_completion(messages=messages_for_decision, max_tokens=150, stream=False)
         initial_reply = response.choices[0].message.content
 
         # Si la IA pide buscar...
@@ -86,13 +79,13 @@ def get_hex_response(user_message, chat_history):
             query = re.search(r"\[BUSCAR:\s*(.*?)\]", initial_reply).group(1)
             search_results, sources = search_duckduckgo(query)
             
-            # Segunda llamada con el contexto de la búsqueda
             final_prompt = f"""
             Eres Tigre (T 1.0). El usuario preguntó "{user_message}". Responde a su pregunta de forma amigable y en español, usando la siguiente información que encontraste en la web:
             
             Contexto: {search_results}
             """
             final_messages = [{"role": "user", "content": final_prompt}]
+            # --- CORRECCIÓN IMPORTANTE: Usamos chat_completion de nuevo ---
             final_response = client.chat_completion(messages=final_messages, max_tokens=1024, stream=False)
             return final_response.choices[0].message.content, sources
         else:
