@@ -71,7 +71,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         if "image" in message: st.image(message["image"], width=200)
         st.markdown(message["content"])
-        if message["role"] == "assistant" and "sources" in message and message["sources"]:
+        if message["role"] == "assistant" and "sources" in message and "sources" in message and message["sources"]:
             with st.expander("Fuentes Consultadas"):
                 for source in message["sources"]:
                     st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
@@ -79,11 +79,12 @@ for message in st.session_state.messages:
 uploaded_file = st.file_uploader("Sube una imagen para analizar", type=["png", "jpg", "jpeg"])
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
-# Palabras clave para el filtro rápido
-conversational_triggers = ["hola", "cómo estás", "como estas", "gracias", "ok", "vale", "adiós", "buenos días", "buenas tardes", "buenas noches", "que tal", "mucho gusto"]
+# --- LÓGICA DE FILTRO CORREGIDA ---
+# Lista de inicios de frases conversacionales
+conversational_starters = ["hola", "buenas", "buenos", "gracias", "ok", "vale", "adiós", "que tal", "mucho gusto", "cómo estás", "como estas"]
 
 if prompt or uploaded_file:
-    # Lógica para imágenes (placeholder, asegúrate de tener la tuya completa aquí)
+    # Lógica para imágenes (placeholder)
     image_to_process = None
     if uploaded_file:
         image = Image.open(uploaded_file)
@@ -105,9 +106,8 @@ if prompt or uploaded_file:
         response_text = ""
         response_sources = []
         
-        # --- FILTRO INTELIGENTE CORREGIDO ---
-        # Quitamos .split() para que busque la frase completa en el mensaje
-        if prompt and any(trigger in prompt.lower() for trigger in conversational_triggers):
+        # FILTRO INTELIGENTE MEJORADO: Usamos startswith() que es más preciso para saludos
+        if prompt and any(prompt.lower().startswith(starter) for starter in conversational_starters):
             # CAMINO RÁPIDO: Respuesta instantánea sin usar la API
             response_text = "¡Hola! Soy T 1.0, tu asistente personal. ¿En qué puedo ayudarte?"
             st.markdown(response_text)
