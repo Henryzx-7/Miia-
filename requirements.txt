@@ -1,3 +1,4 @@
 streamlit
-Pillow
 huggingface-hub
+Pillow
+duckduckgo-search
