@@ -17,7 +17,7 @@ st.markdown("""
         bottom: 0;
         width: 100%;
         background-color: #0e1117; /* Color de fondo de Streamlit */
-        padding: 1rem 1rem 1.5rem 1rem; /* Ajusta el padding */
+        padding: 1rem 1rem 1.5rem 1rem;
         border-top: 1px solid #262730;
     }
     /* Estilo del botón de carga para que parezca un ícono '+' */
@@ -105,17 +105,15 @@ st.divider()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Espacio para que el historial no se solape con el input fijo
-st.div(height="80px")
+# Espacio en blanco para que el historial no se solape con el input fijo
+st.markdown("<div style='padding-bottom: 5rem;'></div>", unsafe_allow_html=True)
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 # --- ÁREA DE INPUT PERSONALIZADA ---
-# Contenedor para alinear los elementos horizontalmente
 input_container = st.container()
-
 with input_container:
     col1, col2 = st.columns([1, 10])
     
@@ -147,7 +145,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
     
     with st.chat_message("assistant"):
         # NIVEL 1: Respuesta instantánea de diccionario
-        if prompt_lower in canned_responses:
+        if prompt and prompt_lower in canned_responses:
             response_text = random.choice(canned_responses[prompt_lower])
             st.markdown(response_text)
             st.session_state.messages.append({"role": "assistant", "content": response_text})
@@ -159,9 +157,8 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                     modelo_ia = get_model()
                     historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
                     
-                    # Esta lógica asume que si hay una imagen, se procesa aquí.
-                    # Simplificado por ahora para enfocarnos en el texto.
                     image_to_process = None
+                    # Esta lógica asume que la imagen se procesa junto con el prompt
                     if uploaded_file:
                         image_to_process = Image.open(uploaded_file)
 
