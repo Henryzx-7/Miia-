@@ -1,6 +1,4 @@
 import streamlit as st
-from PIL import Image
-import io
 from huggingface_hub import InferenceClient
 import random
 
@@ -21,14 +19,15 @@ with st.sidebar:
         st.rerun()
     st.caption("© 2025 HEX. Todos los derechos reservados.")
 
-# --- LÓGICA DE LA IA CON HUGGING FACE ---
+# --- LÓGICA DE LA IA CON HUGGING FACE Y LLAMA 3 ---
 try:
     if "HUGGINGFACE_API_TOKEN" not in st.secrets:
         st.error("No se encontró la clave de Hugging Face. Asegúrate de añadirla a los 'Secrets'.")
         st.stop()
     
+    # --- CAMBIO IMPORTANTE: USAMOS EL MODELO LLAMA 3 DE META ---
     client = InferenceClient(
-        model="mistralai/Mistral-7B-Instruct-v0.2",
+        model="meta-llama/Meta-Llama-3-8B-Instruct",
         token=st.secrets["HUGGINGFACE_API_TOKEN"]
     )
 
@@ -39,38 +38,46 @@ except Exception as e:
 
 def get_hex_response(user_message, chat_history):
     """
-    Genera una respuesta usando un modelo de Hugging Face con un prompt simple.
+    Genera una respuesta usando el modelo Llama 3.
     """
-    # --- NUEVO PROMPT - MÁS SIMPLE Y DIRECTO ---
-    system_prompt = """
-    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable y conversacional. Responde siempre en el mismo idioma que el usuario. 
-    Tu capacidad se limita a tu conocimiento interno; no puedes acceder a internet en tiempo real ni analizar imágenes. Si te piden algo que no puedes hacer, explícalo amablemente y sugiere una tarea que sí puedas realizar, como generar ideas o explicar un concepto.
-    """
+    # Formateamos el prompt para el modelo Llama 3
+    # Llama 3 usa un formato especial con tokens como <|start_header_id|>
+    messages = [
+        {
+            "role": "system",
+            "content": """
+            <|start_header_id|>system<|end_header_id|>
+
+            Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Eres amigable, directo y profesional. Respondes en el mismo idioma que el usuario (español o inglés).
+            Tu principal limitación es que NO tienes acceso a internet para buscar información en tiempo real (noticias, clima). Si te piden algo que no puedes hacer, explícalo amablemente.
+            Tu nombre de modelo es T 1.0 y tu nombre de IA es Tigre. Eres una creación de HEX en Matagalpa, Nicaragua. Nunca menciones a Meta o Llama.
+            <|eot_id|>
+            """,
+        }
+    ]
     
-    messages = [{"role": "system", "content": system_prompt}]
-    
-    # Añadimos el historial previo
-    if chat_history:
-        messages.extend(chat_history)
-    
+    for msg in chat_history:
+        # Aseguramos que los roles son 'user' o 'assistant'
+        role = "user" if msg["role"] == "user" else "assistant"
+        messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
+
     # Añadimos el último mensaje del usuario
-    messages.append({"role": "user", "content": user_message})
+    messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
     
     try:
-        # Llamada a la API de Hugging Face
-        response = client.chat_completion(
-            messages=messages,
-            max_tokens=1024, # Aumentamos un poco el límite para respuestas más completas
-            stream=False,
+        # Usamos el método text_generation que es más simple
+        response_stream = client.text_generation(
+            str(messages), # Llama 3 funciona bien con la representación de string de la lista
+            max_new_tokens=1024,
+            stream=True,
+            details=True,
+            return_full_text=False
         )
-        return response.choices[0].message.content
+        # Unimos la respuesta que viene en pedazos (streaming)
+        response_text = "".join([token.text for token in response_stream])
+        return response_text
     except Exception as e:
-        if "Rate limit reached" in str(e):
-            return "⚠️ Se ha alcanzado el límite de uso gratuito por ahora. Por favor, intenta de nuevo en unos minutos."
-        elif "Model is overloaded" in str(e) or "Model is currently loading" in str(e):
-             return "🤖 El modelo está un poco ocupado o arrancando. Por favor, vuelve a preguntar en un momento."
-        return f"Ha ocurrido un error inesperado: {e}"
-
+        return f"Ha ocurrido un error con la API de Hugging Face: {e}"
 
 # --- INTERFAZ DE STREAMLIT ---
 st.markdown("<h1 style='text-align: center; font-size: 4em; font-weight: bold;'>HEX</h1>", unsafe_allow_html=True)
@@ -87,22 +94,15 @@ for message in st.session_state.messages:
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt:
-    # Añade el mensaje del usuario al historial primero
     st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # Muestra el mensaje del usuario en la pantalla
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Ahora genera y muestra la respuesta del asistente
     with st.chat_message("assistant"):
         with st.spinner("T 1.0 está pensando..."):
-            # Pasamos solo el historial (sin el último mensaje del usuario) a la función
             historial_para_api = st.session_state.messages[:-1]
-            
             response_text = get_hex_response(prompt, historial_para_api)
             st.markdown(response_text)
             
-            # Añade la respuesta del asistente al historial
             assistant_message = {"role": "assistant", "content": response_text}
             st.session_state.messages.append(assistant_message)
