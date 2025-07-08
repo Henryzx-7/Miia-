@@ -1,4 +1,3 @@
-google-generativeai
 streamlit
 Pillow
-duckduckgo-search
+huggingface-hub
