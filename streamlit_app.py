@@ -98,7 +98,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Área para subir archivos
-uploaded_file = st.file_uploader("¿Quieres analizar una imagen?", type=["png", "jpg",jpeg"])
+uploaded_file = st.file_uploader("¿Quieres analizar una imagen?", type=["png", "jpg", "jpeg"])
 
 # Input de texto
 prompt = st.chat_input("Pregúntale algo al modelo T 1.0...")
