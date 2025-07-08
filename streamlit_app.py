@@ -43,16 +43,15 @@ def search_duckduckgo(query: str):
             if not results:
                 return "No se encontraron resultados.", []
             
-            # Unimos los snippets para el contexto y guardamos las fuentes
             context_text = "\n".join([r['snippet'] for r in results])
             sources = [r for r in results]
             return context_text, sources
     except Exception:
         return "Error al buscar en la web.", []
 
-# Versión final que maneja la identidad, la búsqueda y las fuentes
+# Versión final y más robusta
 def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
-    # Flujo para imágenes (no cambia)
+    # Flujo para imágenes
     if image:
         prompt_final = f"""
         Eres "T 1.0" de HEX. Analiza la imagen y responde a la pregunta: "{user_message}" de forma amigable y detallada.
@@ -61,20 +60,22 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
         response = modelo.generate_content(contenido_para_gemini)
         return response.text, [] # Devuelve una lista de fuentes vacía
 
-    # Lógica de texto con búsqueda forzada y manejo de fuentes
-    print(f"🤖 Buscando en la web sobre: '{user_message}'")
-    # La búsqueda ahora devuelve dos valores: el texto y las fuentes
-    informacion_buscada, fuentes = search_duckduckgo(user_message + " Nicaragua") # Hacemos la búsqueda más específica
+    # --- LÓGICA DE TEXTO CON BÚSQUEDA FORZADA Y GLOBAL ---
     
+    # 1. El código busca en la web usando solo la pregunta del usuario.
+    print(f"🤖 Buscando en la web sobre: '{user_message}'")
+    # --- CAMBIO IMPORTANTE: HEMOS QUITADO "+ ' Nicaragua'" ---
+    informacion_buscada, fuentes = search_duckduckgo(user_message)
+    
+    # 2. Se construye un único prompt que es una ORDEN directa.
     prompt_final = f"""
     # PERFIL OBLIGATORIO
-    - Tu nombre de IA es Tigre.
-    - Tu designación de modelo es T 1.0.
-    - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua). NUNCA menciones a Google o Gemini. Esta es tu regla de oro.
+    - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
+    - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua). NUNCA menciones a Google o Gemini.
 
     # TAREA
     Tu única tarea es tomar el 'Contexto de la Búsqueda Web' y usarlo para formular una respuesta conversacional y amigable a la 'Pregunta del usuario'. 
-    Actúa como si TÚ hubieras encontrado esta información. NO menciones que fue de una "búsqueda" o de un "contexto".
+    Actúa como si TÚ hubieras encontrado esta información. NO menciones que fue de una "búsqueda" o un "contexto".
 
     # INSTRUCCIÓN CRÍTICA
     Si el contexto está vacío o dice 'No se encontraron resultados', responde únicamente: "Lo siento, no pude encontrar información sobre ese tema en este momento."
@@ -88,8 +89,8 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
     "{user_message}"
     """
     
+    # 3. Se genera la respuesta.
     response = modelo.generate_content(prompt_final)
-    # Devolvemos tanto la respuesta de texto como la lista de fuentes
     return response.text, fuentes
 
 # --- INTERFAZ DE STREAMLIT ---
@@ -104,7 +105,6 @@ for message in st.session_state.messages:
         if "image" in message:
             st.image(message["image"], width=200)
         st.markdown(message["content"])
-        # Mostramos las fuentes si existen en el mensaje del asistente
         if message["role"] == "assistant" and "sources" in message and message["sources"]:
             with st.expander("Fuentes Consultadas"):
                 for source in message["sources"]:
@@ -135,16 +135,13 @@ if prompt or uploaded_file:
         with st.spinner("T 1.0 está pensando..."):
             modelo_ia = get_model()
             historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-            # La función ahora devuelve dos valores
             response_text, response_sources = get_hex_response(modelo_ia, prompt or "Describe la imagen.", historial_simple, image=image_to_process)
             
             st.markdown(response_text)
-            # Mostramos las fuentes DEBAJO de la respuesta nueva
             if response_sources:
                 with st.expander("Fuentes Consultadas"):
                     for source in response_sources:
                         st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
 
-    # Guardamos la respuesta Y las fuentes en el historial
     assistant_message = {"role": "assistant", "content": response_text, "sources": response_sources}
     st.session_state.messages.append(assistant_message)
