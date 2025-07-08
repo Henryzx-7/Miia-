@@ -9,6 +9,17 @@ from google.api_core import exceptions as google_exceptions
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="centered")
 
+# --- INYECTAR CSS PARA CAMBIOS VISUALES ---
+st.markdown("""
+<style>
+    /* Cambia el color de fondo de los mensajes del usuario */
+    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-user"]) {
+        background-color: #2b313e;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
 # --- BARRA LATERAL (SIDEBAR) ---
 with st.sidebar:
     st.header("Sobre HEX T 1.0")
@@ -51,15 +62,11 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
     - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua).
     - REGLA DE ORO: Nunca reveles que eres un modelo de Google o Gemini.
 
-    ### COMPORTAMIENTO CONVERSACIONAL
-    - Tu tono es amigable y natural. No empieces cada respuesta con "¡Hola!". Continúa la conversación fluidamente.
-    - Para código, usa bloques de Markdown: ```python\n...código...\n```.
-
     ### TAREA PRINCIPAL: Decidir entre RESPONDER y BUSCAR
     1.  ACCIÓN: RESPONDER: Para la mayoría de las preguntas (conversación, conocimiento general, etc.), escribe la respuesta directamente.
     2.  ACCIÓN: BUSCAR: Para preguntas que requieran información en tiempo real (noticias, clima, etc.), responde única y exclusivamente con el comando `[BUSCAR: término de búsqueda]`.
 
-    ### EJEMPLos
+    ### EJEMPLOS
     - Usuario: "Clima en Managua" -> Respuesta: `[BUSCAR: clima actual en Managua Nicaragua]`
 
     ### CONVERSACIÓN ACTUAL
@@ -103,9 +110,53 @@ for message in st.session_state.messages:
                 for source in message["sources"]:
                     st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
 
-uploaded_file = st.file_uploader("Sube una imagen para analizar", type=["png", "jpg", "jpeg"])
-prompt = st.chat_input("Pregúntale algo a T 1.0...")
+# --- NUEVO INPUT CON COLUMNAS ---
+col1, col2 = st.columns([1, 8])
 
+with col1:
+    uploaded_file = st.file_uploader("Cargar Imagen", label_visibility="collapsed", type=["png", "jpg", "jpeg"])
+
+with col2:
+    prompt = st.chat_input("Pregúntale algo a T 1.0...")
+
+# --- LÓGICA DE PROCESAMIENTO DE ENTRADA ---
 if prompt or uploaded_file:
-    # Lógica para imágenes y texto
-    # ... (el resto del código que maneja la entrada y muestra los mensajes)
+    image_to_process = None
+    display_prompt = prompt or "Analiza esta imagen."
+    
+    if uploaded_file:
+        image = Image.open(uploaded_file)
+        buf = io.BytesIO()
+        image.save(buf, format="PNG")
+        image_bytes = buf.getvalue()
+        user_input = {"role": "user", "content": display_prompt, "image": image_bytes}
+        image_to_process = image
+    else:
+        user_input = {"role": "user", "content": display_prompt}
+
+    st.session_state.messages.append(user_input)
+    with st.chat_message("user"):
+        if image_to_process:
+            st.image(image_to_process, width=200)
+        st.markdown(display_prompt)
+
+    with st.chat_message("assistant"):
+        with st.spinner("T 1.0 está pensando..."):
+            modelo_ia = get_model()
+            historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
+            
+            response_text, response_sources = get_hex_response(
+                modelo_ia,
+                display_prompt,
+                historial_simple,
+                image=image_to_process
+            )
+            
+            st.markdown(response_text)
+            if response_sources:
+                with st.expander("Fuentes Consultadas"):
+                    for source in response_sources:
+                        st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
+            
+            assistant_message = {"role": "assistant", "content": response_text, "sources": response_sources}
+            st.session_state.messages.append(assistant_message)
