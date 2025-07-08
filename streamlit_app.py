@@ -4,69 +4,40 @@ from PIL import Image
 import io
 from google.api_core import exceptions as google_exceptions
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="HEX T 1.0 - MODO DIAGNÓSTICO", page_icon="ախ", layout="centered")
 
-# --- BARRA LATERAL (SIDEBAR) ---
-with st.sidebar:
-    st.header("Sobre HEX T 1.0")
-    st.markdown("""
-    **T 1.0** es un prototipo de asistente de IA.
-    **Creador:** HEX
-    **Sede:** Matagalpa, Nicaragua 🇳🇮
-    """)
-    st.divider()
-    st.caption("© 2025 HEX. Todos los derechos reservados.")
+st.info("MODO DE DIAGNÓSTICO ACTIVADO")
 
-# --- LÓGICA DE LA IA ---
+# --- PASO 1: Configuración de API ---
+st.write("Punto de Control 1: Intentando configurar la API de Google...")
+try:
+    if "GEMINI_API_KEY" not in st.secrets:
+        st.error("ERROR CRÍTICO: No se encontró la clave GEMINI_API_KEY en los secretos.")
+        st.stop()
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    st.write("✅ Punto de Control 1: API configurada.")
+except Exception as e:
+    st.error(f"ERROR EN PUNTO 1: {e}")
+    st.stop()
+
+# --- PASO 2: Obteniendo el modelo ---
 @st.cache_resource
 def get_model():
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    return genai.GenerativeModel('gemini-1.5-flash')
+    st.write("Punto de Control 2: Intentando obtener el modelo de IA (esto solo debería pasar una vez).")
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        st.write("✅ Punto de Control 2: Modelo obtenido.")
+        return model
+    except Exception as e:
+        st.error(f"ERROR EN PUNTO 2: {e}")
+        return None
 
-# La función ahora es mucho más simple
-def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
-    # Flujo para imágenes
-    if image:
-        prompt_final = f'Eres "T 1.0" de HEX. Analiza la imagen y responde a la pregunta: "{user_message}"'
-        response = modelo.generate_content([prompt_final, image])
-        return response.text
+modelo_ia = get_model()
+if not modelo_ia:
+    st.stop()
 
-    # --- NUEVO PROMPT "SIN BÚSQUEDA" ---
-    prompt_con_limites = f"""
-    ### PERFIL OBLIGATORIO
-    - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
-    - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua).
-    - REGLA DE ORO: Nunca reveles que eres un modelo de Google o Gemini.
-
-    ### COMPORTAMIENTO Y LIMITACIONES
-    - Tu principal limitación es que **NO TIENES ACCESO A INTERNET**. No puedes buscar información en tiempo real como noticias, clima o eventos actuales.
-    - Si un usuario te pide algo que requiera una búsqueda web, DEBES responder amablemente que estás en una fase de prueba y esa función aún no está disponible.
-    - Inmediatamente después, DEBES ofrecer una lista de las cosas que SÍ puedes hacer.
-
-    ### LISTA DE CAPACIDADES ACTUALES
-    - Generar ideas creativas y hacer lluvia de ideas.
-    - Escribir o depurar código en varios lenguajes.
-    - Resumir o explicar textos.
-    - Responder preguntas de conocimiento general, histórico y científico.
-    - Actuar como un asistente de conversación amigable.
-
-    ### TAREA
-    Analiza la pregunta del usuario. 
-    1. Si requiere búsqueda web, responde con tu mensaje de limitación y ofrece tu lista de capacidades.
-    2. Si NO requiere búsqueda, simplemente responde a la pregunta del usuario de la mejor manera posible.
-
-    ### CONVERSACIÓN ACTUAL
-    Historial: {chat_history}
-    Pregunta del usuario: "{user_message}"
-    """
-    
-    response = modelo.generate_content(prompt_con_limites)
-    return response.text
-
-# --- INTERFAZ DE STREAMLIT ---
+# --- INTERFAZ ---
 st.title("🤖 HEX T 1.0")
-st.caption("Un asistente de lenguaje avanzado creado por HEX.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -75,30 +46,46 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-uploaded_file = st.file_uploader("Sube una imagen para analizar", type=["png", "jpg", "jpeg"])
-prompt = st.chat_input("Pregúntale algo a T 1.0...")
+prompt = st.chat_input("Escribe tu pregunta...")
+
+# Lista de palabras para el filtro
+canned_responses = {
+    "hola": "¡Hola! Soy T 1.0. (Respuesta rápida sin IA)",
+    "cómo estás": "¡Muy bien! (Respuesta rápida sin IA)",
+    "como estas": "¡Muy bien! (Respuesta rápida sin IA)",
+    "gracias": "¡De nada! (Respuesta rápida sin IA)"
+}
 
 if prompt:
+    st.write(f"Punto de Control 3: Se recibió un prompt del usuario: '{prompt}'")
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("T 1.0 está pensando..."):
-            try:
-                modelo_ia = get_model()
-                historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-                
-                # Para el flujo de imagen (si se integra en el futuro)
-                image_to_process = None # De momento no procesamos imagen con texto
-                
-                response_text = get_hex_response(modelo_ia, prompt, historial_simple, image=image_to_process)
-                st.markdown(response_text)
-                
-                assistant_message = {"role": "assistant", "content": response_text}
-                st.session_state.messages.append(assistant_message)
-            
-            except google_exceptions.ResourceExhausted:
-                st.error("⚠️ Límite de solicitudes alcanzado. Por favor, espera un minuto.")
-            except Exception as e:
-                st.error(f"Ha ocurrido un error inesperado: {e}")
+        prompt_lower = prompt.lower().strip()
+        
+        # --- LÓGICA DEL FILTRO ---
+        st.write("Punto de Control 4: Evaluando el filtro inteligente...")
+        if prompt_lower in canned_responses:
+            st.write("✅ Punto de Control 4: El prompt es un saludo. Tomando el camino rápido.")
+            response_text = canned_responses[prompt_lower]
+            st.markdown(response_text)
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
+        else:
+            # --- CAMINO PROFUNDO (LLAMADA A LA API) ---
+            st.write("Punto de Control 5: El prompt es una pregunta real. Preparando para llamar a la API.")
+            with st.spinner("Llamando a la IA..."):
+                try:
+                    # Simplificamos la llamada para el diagnóstico
+                    st.write("Punto de Control 6: ¡Llamando a la API de Gemini AHORA!")
+                    response = modelo_ia.generate_content(f"Responde a esto de forma breve: {prompt}")
+                    response_text = response.text
+                    st.markdown(response_text)
+                    st.session_state.messages.append({"role": "assistant", "content": response_text})
+                except google_exceptions.ResourceExhausted:
+                    st.error("ERROR DEFINITIVO: Se alcanzó el límite de recursos (ResourceExhausted).")
+                except Exception as e:
+                    st.error(f"ERROR DEFINITIVO: Ocurrió un error inesperado durante la llamada a la API: {e}")
+else:
+    st.write("Punto de Control 7: La página se cargó, esperando un prompt del usuario.")
