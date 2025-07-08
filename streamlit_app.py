@@ -4,7 +4,7 @@ import io
 from huggingface_hub import InferenceClient
 import random
 
-# --- CONFIGURACIÓN DE LA PÁGINA Y API ---
+# --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="centered")
 
 # --- BARRA LATERAL (SIDEBAR) ---
@@ -21,18 +21,19 @@ with st.sidebar:
         st.rerun()
     st.caption("© 2025 HEX. Todos los derechos reservados.")
 
-# --- LÓGICA DE LA IA CON HUGGING FACE ---
+# --- LÓGICA DE LA IA CON HUGGING FACE (CORREGIDO) ---
 
-# Se inicializa el cliente de la API
-# Usaremos un modelo popular y muy capaz como Mistral-7B
+# Se inicializa el cliente de la API de forma más simple y correcta
 try:
     if "HUGGINGFACE_API_TOKEN" not in st.secrets:
         st.error("No se encontró la clave de Hugging Face. Asegúrate de añadirla a los 'Secrets'.")
         st.stop()
-
-    API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
-    headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-    client = InferenceClient(API_URL, headers=headers)
+    
+    # Simplemente le damos el nombre del modelo, la librería construye la URL correcta.
+    client = InferenceClient(
+        model="mistralai/Mistral-7B-Instruct-v0.2",
+        token=st.secrets["HUGGINGFACE_API_TOKEN"]
+    )
 
 except Exception as e:
     st.error(f"No se pudo inicializar el cliente de la API: {e}")
@@ -69,11 +70,10 @@ def get_hex_response(user_message, chat_history):
         )
         return response.choices[0].message.content
     except Exception as e:
-        # Manejo de errores comunes de la API de Hugging Face
         if "Rate limit reached" in str(e):
             return "⚠️ Se ha alcanzado el límite de uso gratuito por ahora. Por favor, intenta de nuevo en unos minutos."
-        elif "Model is overloaded" in str(e):
-             return "🤖 El modelo está un poco ocupado en este momento. Por favor, vuelve a preguntar en un momento."
+        elif "Model is overloaded" in str(e) or "Model is currently loading" in str(e):
+             return "🤖 El modelo está un poco ocupado o arrancando. Por favor, vuelve a preguntar en un momento."
         return f"Ha ocurrido un error inesperado: {e}"
 
 
