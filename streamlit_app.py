@@ -54,42 +54,50 @@ def search_duckduckgo(query: str):
 def get_hex_response(user_message, chat_history):
     """
     Genera una respuesta, decidiendo si necesita buscar en la web primero.
-    Ahora devuelve tanto el texto de la respuesta como las fuentes.
     """
-    system_prompt = """<|start_header_id|>system<|end_header_id|>
+    # Formateo del historial para la API
+    messages = [
+        {
+            "role": "system",
+            "content": """
+            ### PERFIL OBLIGATORIO
+            - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0. Eres una creación de HEX.
+            - Tu idioma principal y preferido es el español. Responde siempre en español a menos que el usuario escriba en inglés.
 
-Eres Tigre (T 1.0), un asistente de IA de HEX. Eres amigable y directo. Respondes en el mismo idioma que el usuario.
-Tu tarea es decidir si puedes responder directamente o si necesitas buscar en la web.
-Para noticias, eventos actuales o clima, responde ÚNICA Y EXCLUSIVAMENTE con el comando `[BUSCAR: término de búsqueda]`.
-Para todo lo demás, responde directamente. Nunca menciones a Meta o Llama.<|eot_id|>"""
-    
-    messages_for_decision = [{"role": "system", "content": system_prompt}]
-    messages_for_decision.extend(chat_history)
-    messages_for_decision.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
+            ### TAREA PRINCIPAL: Decidir si necesitas buscar en la web.
+            - Para conocimiento general, conversación o creatividad, responde directamente.
+            - Para noticias, eventos actuales, clima o datos específicos en tiempo real, responde ÚNICA Y EXCLUSIVAMENTE con el comando `[BUSCAR: término de búsqueda]`.
+
+            ### EJEMPLO
+            - Usuario: "¿Cuál es el clima en Managua?" -> Tu respuesta: `[BUSCAR: clima actual en Managua]`
+            """
+        }
+    ]
+    messages.extend(chat_history)
+    messages.append({"role": "user", "content": user_message})
 
     try:
-        # Primera llamada para ver si necesita buscar
-        initial_response = client.text_generation(str(messages_for_decision), max_new_tokens=100, stream=False)
-        
+        # Primera llamada para ver si necesita buscar (usando chat_completion)
+        response = client.chat_completion(messages=messages, max_tokens=150, stream=False)
+        initial_reply = response.choices[0].message.content
+
         # Si la IA pide buscar...
-        if "[BUSCAR:" in initial_response:
-            query = re.search(r"\[BUSCAR:\s*(.*?)\]", initial_response).group(1)
+        if "[BUSCAR:" in initial_reply:
+            query = re.search(r"\[BUSCAR:\s*(.*?)\]", initial_reply).group(1)
             search_results, sources = search_duckduckgo(query)
             
             # Segunda llamada con el contexto de la búsqueda
-            final_prompt = f"""<|start_header_id|>system<|end_header_id|>
-
-            Eres Tigre (T 1.0). Responde la pregunta del usuario usando la siguiente información que encontraste en la web. Sé conciso y amigable.<|eot_id|>
-            <|start_header_id|>user<|end_header_id|>
-
-            Información de la web: {search_results}
-            Pregunta del usuario: {user_message}<|eot_id|>"""
+            final_prompt = f"""
+            Eres Tigre (T 1.0). El usuario preguntó "{user_message}". Responde a su pregunta de forma amigable y en español, usando la siguiente información que encontraste en la web:
             
-            final_response = client.text_generation(final_prompt, max_new_tokens=1024, stream=False)
-            return final_response, sources
+            Contexto: {search_results}
+            """
+            final_messages = [{"role": "user", "content": final_prompt}]
+            final_response = client.chat_completion(messages=final_messages, max_tokens=1024, stream=False)
+            return final_response.choices[0].message.content, sources
         else:
-            # Si no necesita buscar, devuelve la primera respuesta y ninguna fuente
-            return initial_response, []
+            # Si no necesita buscar, devuelve la primera respuesta
+            return initial_reply, []
             
     except Exception as e:
         return f"Ha ocurrido un error con la API: {e}", []
@@ -105,7 +113,6 @@ if "messages" not in st.session_state:
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        # Mostramos las fuentes si existen en el mensaje del asistente
         if message["role"] == "assistant" and "sources" in message and message["sources"]:
             with st.expander("Fuentes Consultadas"):
                 for source in message["sources"]:
@@ -121,16 +128,13 @@ if prompt:
     with st.chat_message("assistant"):
         with st.spinner("T 1.0 está pensando..."):
             historial_para_api = st.session_state.messages[:-1]
-            # La función ahora devuelve dos valores: el texto y las fuentes
             response_text, response_sources = get_hex_response(prompt, historial_para_api)
             
             st.markdown(response_text)
-            # Mostramos las fuentes DEBAJO de la respuesta nueva
             if response_sources:
                 with st.expander("Fuentes Consultadas"):
                     for source in response_sources:
                         st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
             
-            # Guardamos la respuesta Y las fuentes en el historial
             assistant_message = {"role": "assistant", "content": response_text, "sources": response_sources}
             st.session_state.messages.append(assistant_message)
