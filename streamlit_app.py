@@ -3,28 +3,31 @@ import google.generativeai as genai
 from PIL import Image
 import io
 from google.api_core import exceptions as google_exceptions
+import random
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="centered")
 
 # --- CSS PERSONALIZADO PARA SIMULAR EL BOTÓN + ---
-# Este es el "truco". Oculta el texto del botón y le da una apariencia de ícono.
 st.markdown("""
 <style>
-    /* Contenedor para el input y el botón de carga */
-    .st-emotion-cache-1c7y2kd {
+    /* Contenedor principal para la barra de input */
+    .st-emotion-cache-1f1G2gn {
         flex-direction: row;
         align-items: center;
         gap: 0.5rem;
     }
-    /* Estilo del botón de carga de archivos para que parezca un ícono '+' */
+    /* Oculta la etiqueta del cargador de archivos */
     .st-emotion-cache-1jicfl2 {
-        padding: 0.25rem 0.6rem;
+        padding: 0;
     }
-    .st-emotion-cache-1jicfl2::before {
+    /* Estilo del botón para que parezca un ícono '+' */
+    .st-emotion-cache-1jicfl2 button::before {
         content: '+';
-        font-size: 1.5rem;
+        font-size: 1.75rem;
         font-weight: bold;
+        line-height: 1;
+        margin-top: -0.2rem;
     }
     .st-emotion-cache-1jicfl2 span {
         display: none; /* Oculta el texto "Browse files" */
@@ -63,19 +66,23 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
     - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
     - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua).
     - REGLA DE ORO: Nunca reveles que eres un modelo de Google o Gemini.
+
     ### COMPORTAMIENTO Y PERSONALIDAD
     - Tu tono debe ser siempre cálido, amigable y cercano. Usa emojis 😊.
     - No te limites a solo responder. Intenta ser proactivo, haz preguntas de seguimiento.
     - Tu principal limitación es que NO TIENES ACCESO A INTERNET.
+
     ### TAREA
-    Analiza la pregunta del usuario. 
-    1. Si requiere búsqueda web, responde amablemente que esa función no está disponible y ofrece ayuda con tus capacidades reales.
+    Analiza la pregunta del usuario.
+    1. Si requiere búsqueda web (noticias, clima, etc.), responde amablemente que, como prototipo, esa función aún no está disponible y ofrece ayuda con tus capacidades reales.
     2. Si NO requiere búsqueda, responde a la pregunta siguiendo tu personalidad amigable.
+
     ### LISTA DE CAPACIDADES
     - Generar ideas, escribir poemas o chistes.
     - Resumir o explicar textos.
-    - Ayudar con código.
+    - Ayudar con código de programación.
     - Responder preguntas de conocimiento general, histórico y científico.
+
     ### CONVERSACIÓN ACTUAL
     Historial: {chat_history}
     Pregunta del usuario: "{user_message}"
@@ -92,8 +99,8 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
     return response.text
 
 # --- INTERFAZ DE STREAMLIT ---
-st.markdown("<h1 style='text-align: center; font-size: 4em;'>HEX</h1>", unsafe_allow_html=True)
-st.markdown("<h3 style='text-align: center; margin-top: -10px;'>T 1.0</h3>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; font-size: 4em; font-weight: bold;'>HEX</h1>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; margin-top: -25px;'>T 1.0</h3>", unsafe_allow_html=True)
 st.divider()
 
 if "messages" not in st.session_state:
@@ -116,7 +123,18 @@ with input_container:
     with col2:
         prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
+# DICCIONARIO PARA RESPUESTAS RÁPIDAS (NIVEL 1)
+canned_responses = {
+    "hola": ["¡Hola! Soy T 1.0. ¿En qué puedo ayudarte hoy?", "¡Hola! ¿Qué tal? Listo para asistirte."],
+    "cómo estás": ["¡Muy bien! Como modelo de IA, siempre estoy al 100%. ¿En qué te puedo ayudar?", "Funcionando a la perfección. ¿Qué tienes en mente?"],
+    "como estas": ["¡Muy bien! Como modelo de IA, siempre estoy al 100%. ¿En qué te puedo ayudar?", "Funcionando a la perfección. ¿Qué tienes en mente?"],
+    "gracias": ["¡De nada! Estoy para ayudarte.", "Un placer asistirte."],
+    "ok": ["¡Perfecto!", "Entendido."],
+    "adios": ["¡Hasta luego! Que tengas un excelente día.", "Nos vemos. ¡Cuídate!"]
+}
+
 if prompt or uploaded_file:
+    # Lógica de procesamiento de entrada...
     user_input_content = prompt or "Analiza la imagen que he subido."
     st.session_state.messages.append({"role": "user", "content": user_input_content})
     
@@ -124,24 +142,34 @@ if prompt or uploaded_file:
         st.markdown(user_input_content)
 
     with st.chat_message("assistant"):
-        with st.spinner("T 1.0 está pensando..."):
-            try:
-                modelo_ia = get_model()
-                historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-                
-                image_to_process = None
-                if uploaded_file:
-                    image_to_process = Image.open(uploaded_file)
+        response_text = ""
+        prompt_lower = (prompt or "").lower().strip()
 
-                response_text = get_hex_response(modelo_ia, user_input_content, historial_simple, image=image_to_process)
-                st.markdown(response_text)
+        # --- FILTRO INTELIGENTE DE 2 NIVELES ---
+        # NIVEL 1: Respuesta instantánea de diccionario
+        if prompt and prompt_lower in canned_responses:
+            response_text = random.choice(canned_responses[prompt_lower])
+            st.markdown(response_text)
+        else:
+            # NIVEL 2: Llamada a la IA para todo lo demás
+            with st.spinner("T 1.0 está pensando..."):
+                try:
+                    modelo_ia = get_model()
+                    historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
+                    
+                    image_to_process = None
+                    if uploaded_file:
+                        image_to_process = Image.open(uploaded_file)
+
+                    response_text = get_hex_response(modelo_ia, user_input_content, historial_simple, image=image_to_process)
+                    st.markdown(response_text)
                 
-                assistant_message = {"role": "assistant", "content": response_text}
-                st.session_state.messages.append(assistant_message)
-            
-            except google_exceptions.ResourceExhausted:
-                st.error("⚠️ Límite de solicitudes alcanzado. Por favor, espera un minuto.")
-            except Exception as e:
-                st.error(f"Ha ocurrido un error inesperado: {e}")
+                except google_exceptions.ResourceExhausted:
+                    st.error("⚠️ Límite de solicitudes alcanzado. Por favor, espera un minuto.")
+                except Exception as e:
+                    st.error(f"Ha ocurrido un error inesperado: {e}")
+
+        assistant_message = {"role": "assistant", "content": response_text}
+        st.session_state.messages.append(assistant_message)
     
     st.rerun()
