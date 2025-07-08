@@ -42,7 +42,7 @@ def search_duckduckgo(query: str):
     except Exception:
         return "Error al buscar en la web."
 
-# Versión final con el prompt más autoritario
+# Versión final con el prompt más robusto y equilibrado
 def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
     # Flujo para imágenes (no cambia)
     if image:
@@ -53,36 +53,46 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
         response = modelo.generate_content(contenido_para_gemini)
         return response.text
     
-    # --- LÓGICA DE TEXTO CON BÚSQUEDA FORZADA ---
-    
-    # 1. El código siempre busca en la web primero.
-    print(f"🤖 Buscando en la web sobre: '{user_message}'")
-    informacion_buscada = search_duckduckgo(user_message)
-    
-    # 2. Se construye un único prompt que es una ORDEN directa.
-    prompt_final = f"""
-    # IDENTIDAD
-    Eres "T 1.0" de HEX (Matagalpa, Nicaragua), un asistente amigable. La "T" es por Tigre. NUNCA digas que usas Google o Gemini.
+    # --- PROMPT FINAL Y DEFINITIVO PARA TEXTO ---
+    prompt_intento_rapido = f"""
+    ### PERFIL OBLIGATORIO
+    - Eres T 1.0, un asistente de IA de HEX (Matagalpa, Nicaragua).
+    - Tu nombre significa "Tigre".
+    - TU CREADOR ES HEX. NUNCA menciones a Google o Gemini. Esta es tu regla más importante.
 
-    # TAREA
-    Tu única tarea es tomar el 'Contexto de la Búsqueda Web' y usarlo para formular una respuesta conversacional y amigable a la 'Pregunta del usuario'. 
-    Actúa como si TÚ hubieras encontrado esta información. NO menciones que fue de una "búsqueda" o de un "contexto". Simplemente, responde la pregunta usando la información proporcionada.
+    ### COMPORTAMIENTO CONVERSACIONAL
+    - Tu tono es amigable, servicial y natural. No empieces cada respuesta con "¡Hola!". Continúa la conversación fluidamente.
+    - Para código, usa bloques de Markdown: ```python\n...código...\n```.
 
-    # INSTRUCCIÓN CRÍTICA
-    Si el contexto está vacío o dice 'No se encontraron resultados', responde únicamente: "Lo siento, no pude encontrar información sobre ese tema en este momento."
+    ### HERRAMIENTA DISPONIBLE: BÚSQUEDA WEB
+    - Posees una herramienta para acceder a información en tiempo real.
+    - Para usarla, tu única y exclusiva respuesta debe ser el comando `[BUSCAR: término de búsqueda preciso]`.
+    - DEBES usar esta herramienta para cualquier pregunta sobre noticias, eventos actuales, clima, o cualquier dato que no sea conocimiento general o histórico.
+    - NO digas que no puedes buscar. Usa la herramienta.
 
-    # CONTEXTO DE LA BÚSQUEDA WEB
-    ---
-    {informacion_buscada}
-    ---
+    ### TAREA
+    Analiza el último mensaje del usuario y el historial para decidir tu acción. Si necesitas la herramienta, úsala. Si no, responde directamente usando tu perfil y conocimiento.
 
-    # PREGUNTA DEL USUARIO
-    "{user_message}"
+    ### CONVERSACIÓN
+    Historial: {chat_history}
+    Mensaje del usuario: "{user_message}"
     """
     
-    # 3. Se genera la respuesta en un solo paso.
-    response = modelo.generate_content(prompt_final)
-    return response.text
+    primera_respuesta = modelo.generate_content(prompt_intento_rapido).text
+    
+    if "[BUSCAR:" in primera_respuesta:
+        termino_a_buscar = re.search(r"\[BUSCAR:\s*(.*?)\]", primera_respuesta).group(1)
+        print(f"🤖 IA solicitó búsqueda para: '{termino_a_buscar}'")
+        informacion_buscada = search_duckduckgo(termino_a_buscar)
+        
+        prompt_con_busqueda = f"""
+        Eres "T 1.0". El usuario preguntó: "{user_message}". Responde de forma final usando este contexto que encontraste en la web. Actúa como si tú mismo hubieras encontrado la información.
+        Contexto: --- {informacion_buscada} ---
+        """
+        response_final = modelo.generate_content(prompt_con_busqueda).text
+        return response_final
+    else:
+        return primera_respuesta
 
 # --- INTERFAZ DE STREAMLIT ---
 st.title("🤖 HEX T 1.0")
