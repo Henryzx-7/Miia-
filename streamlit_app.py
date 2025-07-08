@@ -23,29 +23,35 @@ with st.sidebar:
 # --- LÓGICA DE LA IA ---
 @st.cache_resource
 def get_model():
+    """Obtiene y cachea el modelo de IA para no recargarlo."""
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     return genai.GenerativeModel('gemini-1.5-flash')
 
 def search_duckduckgo(query: str):
+    """Realiza una búsqueda web y devuelve contexto y fuentes."""
     try:
         with DDGS() as ddgs:
             results = [{"snippet": r['body'], "url": r['href']} for r in ddgs.text(query, max_results=4)]
-            if not results: return "No se encontraron resultados.", []
+            if not results:
+                return "No se encontraron resultados.", []
             context_text = "\n".join([r['snippet'] for r in results])
             sources = [r for r in results]
             return context_text, sources
     except Exception:
         return "Error al buscar en la web.", []
 
-# Versión final con el prompt más robusto y equilibrado
 def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
-    # Flujo para imágenes
+    """
+    Genera una respuesta de la IA, decidiendo si buscar en la web
+    o responder directamente.
+    """
+    # Flujo prioritario para imágenes
     if image:
         prompt_final = f'Eres "T 1.0" de HEX. Analiza la imagen y responde a la pregunta: "{user_message}"'
         response = modelo.generate_content([prompt_final, image])
         return response.text, []
 
-    # --- PROMPT DEFINITIVO CON DECISIÓN INTELIGENTE Y REGLAS ESTRICTAS ---
+    # Flujo para texto con decisión de búsqueda
     prompt_intento_rapido = f"""
     ### PERFIL OBLIGATORIO
     - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
@@ -92,7 +98,6 @@ def get_hex_response(modelo, user_message, chat_history, image: Image.Image = No
         response_final = modelo.generate_content(prompt_con_busqueda).text
         return response_final, fuentes
     else:
-        # Si no pide buscar, devuelve la respuesta rápida y una lista de fuentes vacía
         return primera_respuesta, []
 
 # --- INTERFAZ DE STREAMLIT ---
@@ -104,7 +109,8 @@ if "messages" not in st.session_state:
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        if "image" in message: st.image(message["image"], width=200)
+        if "image" in message:
+            st.image(message["image"], width=200)
         st.markdown(message["content"])
         if message["role"] == "assistant" and "sources" in message and message["sources"]:
             with st.expander("Fuentes Consultadas"):
@@ -115,29 +121,39 @@ uploaded_file = st.file_uploader("Sube una imagen para analizar", type=["png", "
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt or uploaded_file:
-    # Lógica para imágenes
+    # Lógica unificada para manejar la entrada
     image_to_process = None
+    display_prompt = prompt or "Analiza esta imagen."
+    
     if uploaded_file:
         image = Image.open(uploaded_file)
         buf = io.BytesIO()
         image.save(buf, format="PNG")
         image_bytes = buf.getvalue()
-        user_input = {"role": "user", "content": prompt or "Analiza esta imagen.", "image": image_bytes}
+        user_input = {"role": "user", "content": display_prompt, "image": image_bytes}
         image_to_process = image
     else:
-        user_input = {"role": "user", "content": prompt}
+        user_input = {"role": "user", "content": display_prompt}
 
     st.session_state.messages.append(user_input)
     with st.chat_message("user"):
-        if uploaded_file: st.image(image_to_process, width=200)
-        st.markdown(prompt or "Analiza esta imagen.")
+        if image_to_process:
+            st.image(image_to_process, width=200)
+        st.markdown(display_prompt)
 
+    # Llama a la IA para obtener la respuesta
     with st.chat_message("assistant"):
         with st.spinner("T 1.0 está pensando..."):
             try:
                 modelo_ia = get_model()
                 historial_simple = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
-                response_text, response_sources = get_hex_response(modelo_ia, prompt or "Describe la imagen.", historial_simple, image=image_to_process)
+                
+                response_text, response_sources = get_hex_response(
+                    modelo_ia,
+                    display_prompt,
+                    historial_simple,
+                    image=image_to_process
+                )
                 
                 st.markdown(response_text)
                 if response_sources:
@@ -148,6 +164,8 @@ if prompt or uploaded_file:
                 assistant_message = {"role": "assistant", "content": response_text, "sources": response_sources}
                 st.session_state.messages.append(assistant_message)
             
-            except google_exceptions.ResourceExhausted as e:
+            except google_exceptions.ResourceExhausted:
                 st.error("⚠️ En este momento hay muchas solicitudes. Por favor, espera un minuto y vuelve a preguntar.")
-            except Exception as e
+            # --- LÍNEA CORREGIDA ---
+            except Exception as e:
+                st.error(f"Ha ocurrido un error inesperado: {e}")
