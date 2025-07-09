@@ -15,6 +15,7 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Space+Grotesk:wght@700&display=swap');
 
+    /* Encabezado animado */
     .animated-title {
         font-family: 'Space Grotesk', sans-serif;
         font-size: 4em; font-weight: 700; text-align: center; color: #888;
@@ -26,13 +27,31 @@ st.markdown("""
     .subtitle { text-align: center; margin-top: -25px; font-size: 1.5em; color: #aaa; }
     @keyframes shine { to { background-position: -200% center; } }
 
-    .message-container { display: flex; width: 100%; margin-bottom: 10px; animation: fadeIn 0.5s ease-in-out; }
-    .user-container { justify-content: flex-end; display: flex; }
-    .bot-container { justify-content: flex-start; }
-    .chat-bubble { padding: 12px 18px; border-radius: 20px; max-width: 75%; word-wrap: break-word; }
-    .user-bubble { background-color: #f0f0f0; color: #333; }
-    .bot-bubble { background-color: #2b2d31; color: #fff; }
-
+    /* --- NUEVA LÓGICA DE BURBUJAS DE CHAT CON 'FLOAT' --- */
+    .message-container {
+        width: 100%;
+        overflow: auto; /* 'Clearfix' para que los floats no se sobrepongan */
+        margin-bottom: 10px;
+        animation: fadeIn 0.5s ease-in-out;
+    }
+    .chat-bubble {
+        padding: 12px 18px;
+        border-radius: 20px;
+        max-width: 75%;
+        word-wrap: break-word;
+    }
+    .user-bubble {
+        float: right; /* Fuerza el elemento a alinearse a la derecha */
+        background-color: #f0f0f0;
+        color: #333;
+    }
+    .bot-bubble {
+        float: left; /* Fuerza el elemento a alinearse a la izquierda */
+        background-color: #2b2d31;
+        color: #fff;
+    }
+    
+    /* El resto de los estilos se mantienen igual */
     .thinking-animation-container { display: flex; justify-content: flex-start; width: 100%; margin: 10px 0; }
     .thinking-animation {
         font-style: italic; color: #888;
@@ -43,7 +62,6 @@ st.markdown("""
         padding: 12px 18px; border-radius: 20px;
         background-color: #2b2d31;
     }
-
     .code-block-container { position: relative; background-color: #1e1e1e; border-radius: 8px; margin: 1rem 0; color: #f0f0f0; }
     .code-block-header { display: flex; justify-content: space-between; align-items: center; background-color: #333; padding: 8px 12px; border-top-left-radius: 8px; border-top-right-radius: 8px;}
     .code-block-lang { color: #ccc; font-size: 0.9em; font-family: 'Roboto Mono', monospace; }
