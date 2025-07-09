@@ -1,120 +1,136 @@
 import streamlit as st
 from huggingface_hub import InferenceClient
 import random
-from duckduckgo_search import DDGS
-import re
-from datetime import datetime
-import pytz
+from PIL import Image
+import io
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide") # Layout ancho para el chat
+st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
 # --- ESTILOS CSS PERSONALIZADOS PARA EL CHAT ---
+# Mantenemos solo el estilo para las burbujas de chat, que sí funciona bien.
 st.markdown("""
 <style>
-    /* Contenedor principal del chat */
-    .st-emotion-cache-1f1G2gn {
-        position: fixed;
-        bottom: 0;
-        width: 100%;
-        background-color: #0e1117;
-        padding: 1rem 1rem 1.5rem 1rem;
-        border-top: 1px solid #262730;
+    .chat-container {
+        display: flex;
+        flex-direction: column;
     }
-    /* Estilo para las burbujas de mensaje */
     .chat-bubble {
         padding: 10px 15px;
         border-radius: 20px;
         margin-bottom: 10px;
-        max-width: 70%;
+        max-width: 75%;
         clear: both;
     }
-    /* Mensajes del usuario a la derecha */
     .user-bubble {
-        background-color: #2b313e;
+        background-color: #3c415c; /* Un color azulado/gris para el usuario */
         float: right;
+        color: white;
     }
-    /* Mensajes de la IA a la izquierda */
     .bot-bubble {
-        background-color: #4a4a4f;
+        background-color: #262730; /* Un gris más oscuro para el bot */
         float: left;
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
 
-
 # --- BARRA LATERAL (SIDEBAR) ---
 with st.sidebar:
     st.header("Sobre HEX T 1.0")
-    # ... (contenido de la barra lateral)
+    st.markdown("""
+    **T 1.0** es un prototipo de asistente de IA.
+    **Creador:** HEX
+    **Sede:** Matagalpa, Nicaragua 🇳🇮
+    """)
+    st.divider()
     if st.button("Limpiar Historial"):
         st.session_state.messages = []
         st.rerun()
+    st.caption("© 2025 HEX. Todos los derechos reservados.")
 
-# --- LÓGICA DE LA IA Y FUNCIONES ---
+# --- LÓGICA DE LA IA ---
 try:
-    client = InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
+    if "HUGGINGFACE_API_TOKEN" not in st.secrets:
+        st.error("No se encontró la clave de Hugging Face. Asegúrate de añadirla a los 'Secrets'.")
+        st.stop()
+    
+    client = InferenceClient(
+        model="meta-llama/Meta-Llama-3-8B-Instruct",
+        token=st.secrets["HUGGINGFACE_API_TOKEN"]
+    )
 except Exception as e:
     st.error(f"No se pudo inicializar el cliente de la API: {e}")
     st.stop()
 
-def get_current_datetime():
-    """Obtiene la fecha y hora actual de Nicaragua."""
-    nicaragua_tz = pytz.timezone('America/Managua')
-    now = datetime.now(nicaragua_tz)
-    # Formateamos la fecha y hora en español
-    dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-    meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    fecha = f"{dias[now.weekday()]}, {now.day} de {meses[now.month - 1]} de {now.year}"
-    hora = now.strftime('%I:%M %p')
-    return f"Claro, la fecha y hora actual en Nicaragua es: **{fecha}, {hora}**."
+@st.cache_data
+def get_hex_response(_user_message, _chat_history):
+    """
+    Genera una respuesta usando Llama 3. Usamos _ para los argumentos que no cambian
+    y que el caché de Streamlit puede manejar de forma simple.
+    """
+    system_prompt = """
+    <|start_header_id|>system<|end_header_id|>
 
-# ... (Las funciones search_duckduckgo y get_hex_response se mantienen igual que en la última versión) ...
-def get_hex_response(user_message, chat_history):
-    # La lógica interna de esta función (el prompt para Llama 3) no necesita cambiar.
-    # El código principal decidirá si la llama o no.
-    # ...
-    # Aquí iría el código completo de la función get_hex_response
-    # Por brevedad, se omite, pero debe estar aquí el código de la respuesta anterior.
-    # Placeholder de respuesta para el ejemplo
-    return f"Procesando tu pregunta sobre: {user_message}", []
+    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario (español o inglés).
+    Tu principal limitación es que NO tienes acceso a internet para buscar información en tiempo real. Si te piden algo que no puedes hacer (noticias, clima), explícalo amablemente.
+    Tu nombre de modelo es T 1.0 y tu nombre de IA es Tigre. Eres una creación de HEX en Matagalpa, Nicaragua. Nunca menciones a Meta o Llama.
+    <|eot_id|>
+    """
+    
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Convertimos el historial a un formato compatible
+    for msg in _chat_history:
+        role = "user" if msg["role"] == "user" else "assistant"
+        messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
 
+    messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{_user_message}<|eot_id|>"})
+    
+    try:
+        response_stream = client.text_generation(str(messages), max_new_tokens=1024, stream=True)
+        return response_stream
+    except Exception as e:
+        # Devuelve el error como un string para que se pueda mostrar
+        return iter([f"Ha ocurrido un error con la API: {e}"])
 
-# --- INTERFAZ PRINCIPAL Y LÓGICA DE CHAT ---
-st.title("HEX T 1.0") # Título simple, el diseño lo hacemos con Markdown
+# --- INTERFAZ DE STREAMLIT ---
+st.title("HEX T 1.0")
+
+# Contenedor para el historial del chat
+chat_container = st.container()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Muestra el historial usando el nuevo diseño de CSS
-for message in st.session_state.messages:
-    if message["role"] == "user":
-        st.markdown(f"<div class='chat-bubble user-bubble'>{message['content']}</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div class='chat-bubble bot-bubble'>{message['content']}</div>", unsafe_allow_html=True)
+with chat_container:
+    # Mostramos el historial usando el nuevo diseño de CSS
+    st.write("<div class='chat-container'>", unsafe_allow_html=True)
+    for message in st.session_state.messages:
+        if message["role"] == "user":
+            st.markdown(f"<div class='chat-bubble user-bubble'>{message['content']}</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='chat-bubble bot-bubble'>{message['content']}</div>", unsafe_allow_html=True)
+    st.write("</div>", unsafe_allow_html=True)
 
-# --- ÁREA DE INPUT ---
-input_container = st.container()
-with input_container:
-    prompt = st.chat_input("Pregúntale algo a T 1.0...")
+# Input del usuario al final de la página
+prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     
-    # --- LÓGICA DE RESPUESTA CON NUEVO FILTRO DE FECHA/HORA ---
-    prompt_lower = prompt.lower().strip()
+    # Llama a la IA para obtener la respuesta
+    with st.spinner("T 1.0 está pensando..."):
+        # Convertimos el historial a una tupla de diccionarios para que sea cacheable
+        historial_para_cache = tuple(frozenset(item.items()) for item in st.session_state.messages[:-1])
+        
+        response_stream = get_hex_response(prompt, historial_para_cache)
+        
+        # Muestra la respuesta en streaming
+        bot_response = st.write_stream(response_stream)
+        
+        # Guarda la respuesta completa en el historial
+        st.session_state.messages.append({"role": "assistant", "content": bot_response})
     
-    # Filtro Nivel 0: Fecha y Hora (sin IA)
-    if any(s in prompt_lower for s in ["qué fecha es hoy", "que fecha es hoy", "dime la fecha", "qué hora es", "que hora es"]):
-        response_text = get_current_datetime()
-        st.session_state.messages.append({"role": "assistant", "content": response_text})
-    else:
-        # Llama a la IA para todo lo demás
-        with st.spinner("T 1.0 está pensando..."):
-            historial_para_api = st.session_state.messages[:-1]
-            response_text, response_sources = get_hex_response(prompt, historial_para_api)
-            
-            assistant_message = {"role": "assistant", "content": response_text, "sources": response_sources}
-            st.session_state.messages.append(assistant_message)
-    
+    # Refresca la página para mostrar los nuevos mensajes
     st.rerun()
