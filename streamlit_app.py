@@ -1,6 +1,9 @@
 import streamlit as st
-import time
 from huggingface_hub import InferenceClient
+from PIL import Image
+import io
+import time
+import random
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
@@ -8,30 +11,39 @@ st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 # --- ESTILOS CSS PERSONALIZADOS ---
 st.markdown("""
 <style>
+    /* Elimina el espacio extra en la parte superior */
+    .block-container {
+        padding-top: 2rem;
+    }
+    /* Contenedor de la burbuja de chat */
     .chat-bubble {
-        padding: 12px 18px;
+        display: inline-block;
+        padding: 10px 15px;
         border-radius: 20px;
         margin-bottom: 10px;
-        max-width: 70%;
+        max-width: 75%;
         word-wrap: break-word;
-        clear: both;
     }
+    /* Contenedor para alinear los mensajes */
+    .message-container {
+        display: flex;
+        width: 100%;
+        margin-bottom: 5px;
+    }
+    /* Mensajes del usuario (derecha) */
     .user-container {
-        display: flex;
         justify-content: flex-end;
-        width: 100%;
     }
+    /* Mensajes del bot (izquierda) */
     .bot-container {
-        display: flex;
         justify-content: flex-start;
-        width: 100%;
     }
     .user-bubble {
-        background-color: #0b93f6;
+        background-color: #0b93f6; /* Azul para el usuario */
         color: white;
     }
     .bot-bubble {
-        background-color: #e5e5ea;
+        background-color: #e5e5ea; /* Gris claro para el bot */
         color: black;
     }
 </style>
@@ -62,40 +74,37 @@ def get_hex_response(client, user_message, chat_history):
         messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
     messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
     
-    def response_generator(stream):
-        for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-    
     try:
-        stream = client.chat_completion(messages=messages, max_tokens=1024, stream=True)
-        return response_generator(stream)
+        # Ya no usamos streaming para máxima estabilidad
+        response = client.chat_completion(messages=messages, max_tokens=1024, stream=False)
+        return response.choices[0].message.content
     except Exception as e:
-        return iter([f"Ha ocurrido un error con la API: {e}"])
+        return f"Ha ocurrido un error con la API: {e}"
 
 def generate_chat_name(first_prompt):
     """Genera un nombre para el chat a partir del primer mensaje."""
     name = first_prompt.split('\n')[0]
     return name[:30] + "..." if len(name) > 30 else name
 
-# --- GESTIÓN DE ESTADO E INTERFAZ ---
+# --- INICIALIZACIÓN ---
 client_ia = get_client()
 
-# Inicialización del estado de la sesión
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 if "active_chat_id" not in st.session_state:
     st.session_state.active_chat_id = None
+if not st.session_state.active_chat_id and st.session_state.chats:
+    st.session_state.active_chat_id = list(st.session_state.chats.keys())[-1]
 
-# --- BARRA LATERAL (SIDEBAR) PARA GESTIÓN DE CHATS ---
+# --- BARRA LATERAL (SIDEBAR) ---
 with st.sidebar:
     st.header("Mis Conversaciones")
     if st.button("➕ Nuevo Chat", use_container_width=True):
         st.session_state.active_chat_id = None
+        st.session_state.messages = [] # Limpiamos los mensajes activos
         st.rerun()
 
     st.divider()
-
     chat_ids = list(st.session_state.chats.keys())
     for chat_id in reversed(chat_ids):
         chat_info = st.session_state.chats[chat_id]
@@ -111,21 +120,24 @@ with st.sidebar:
                     st.session_state.active_chat_id = None
                 st.rerun()
 
-# --- ÁREA PRINCIPAL DEL CHAT ---
+# --- INTERFAZ PRINCIPAL DEL CHAT ---
 st.title("HEX T 1.0")
 
-if st.session_state.active_chat_id is None and len(st.session_state.chats) > 0:
-    # Si no hay chat activo pero hay chats guardados, activa el más reciente
-    st.session_state.active_chat_id = list(st.session_state.chats.keys())[-1]
+# Contenedor para el historial del chat
+chat_history_container = st.container(height=500, border=False)
 
-active_messages = st.session_state.chats.get(st.session_state.active_chat_id, {}).get("messages", [])
-
-# Muestra el historial de chat activo
-for message in active_messages:
-    st.markdown(f"<div class='{message['role']}-container'><div class='chat-bubble {message['role']}-bubble'>{message['content']}</div></div>", unsafe_allow_html=True)
+with chat_history_container:
+    if st.session_state.active_chat_id:
+        active_messages = st.session_state.chats[st.session_state.active_chat_id].get("messages", [])
+        for message in active_messages:
+            container_class = "user-container" if message["role"] == "user" else "bot-container"
+            bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
+            st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
 
 # Input del usuario
-if prompt := st.chat_input("Pregúntale algo a T 1.0..."):
+prompt = st.chat_input("Pregúntale algo a T 1.0...")
+
+if prompt:
     # Si es un chat nuevo, créalo
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
@@ -140,17 +152,10 @@ if prompt := st.chat_input("Pregúntale algo a T 1.0..."):
 
     # Llama a la IA y guarda su respuesta
     if client_ia:
-        with st.chat_message("assistant"): # Placeholder para el spinner
-            with st.spinner("T 1.0 está pensando..."):
-                # --- CORRECCIÓN CLAVE ---
-                # Pasamos la lista de mensajes, no el diccionario de chat completo
-                response_stream = get_hex_response(
-                    client_ia,
-                    prompt, 
-                    st.session_state.chats[st.session_state.active_chat_id]["messages"]
-                )
-                bot_response = st.write_stream(response_stream)
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": bot_response})
+        with st.spinner("T 1.0 está pensando..."):
+            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]
+            response_text = get_hex_response(client_ia, prompt, historial_para_api["messages"])
+            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
     else:
         st.error("El cliente de la API no está disponible.")
     
