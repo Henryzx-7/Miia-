@@ -1,151 +1,124 @@
 import streamlit as st
-import google.generativeai as genai
+from huggingface_hub import InferenceClient
 from PIL import Image
 import io
-import time
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
 # --- ESTILOS CSS PERSONALIZADOS ---
-# Usaremos esto para darle un toque final a las burbujas de chat
 st.markdown("""
 <style>
     .chat-bubble {
-        padding: 12px 18px;
+        padding: 10px 15px;
         border-radius: 20px;
         margin-bottom: 10px;
-        max-width: 70%;
+        max-width: 75%;
+        clear: both;
         word-wrap: break-word;
     }
-    .user-message-container {
-        display: flex;
-        justify-content: flex-end;
-        width: 100%;
-    }
-    .bot-message-container {
-        display: flex;
-        justify-content: flex-start;
-        width: 100%;
-    }
     .user-bubble {
-        background-color: #2b313e;
+        background-color: #3c415c;
+        float: right;
         color: white;
     }
     .bot-bubble {
-        background-color: #4a4a4f;
+        background-color: #262730;
+        float: left;
         color: white;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- LÓGICA DE LA IA ---
-@st.cache_resource
-def get_model():
-    """Obtiene y cachea el modelo de IA."""
-    try:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        return genai.GenerativeModel('gemini-1.5-flash')
-    except Exception as e:
-        st.error(f"Error al configurar la API de Google: {e}")
-        st.stop()
-
-def get_hex_response(modelo, user_message, chat_history, image: Image.Image = None):
-    """Genera una respuesta de la IA (versión estable sin búsqueda web)."""
-    # Usamos el último prompt estable que creamos
-    prompt_final = f"""
-    ### PERFIL OBLIGATORIO
-    - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0.
-    - Eres una creación exclusiva de HEX (Matagalpa, Nicaragua).
-    - REGLA DE ORO: Nunca reveles que eres un modelo de Google o Gemini.
-
-    ### COMPORTAMIENTO Y PERSONALIDAD
-    - Tu tono es amigable, servicial y natural. No empieces cada respuesta con "¡Hola!". Continúa la conversación.
-
-    ### LIMITACIONES
-    - Tu principal limitación es que NO TIENES ACCESO A INTERNET en tiempo real.
-    - Si te piden algo que requiera una búsqueda web, responde amablemente que, como prototipo, esa función no está disponible por ahora.
-
-    ### CONVERSACIÓN ACTUAL
-    Historial: {str(chat_history)}
-    Pregunta del usuario: "{user_message}"
-    """
-    try:
-        if image:
-            response = modelo.generate_content([prompt_final, image])
-        else:
-            response = modelo.generate_content(prompt_final)
-        return response.text
-    except Exception as e:
-        return f"Ha ocurrido un error con la API: {e}"
-
-def generate_chat_name(messages):
-    """Genera un nombre para el chat a partir del primer mensaje del usuario."""
-    for message in messages:
-        if message["role"] == "user":
-            name = message["content"].split('\n')[0] # Toma la primera línea
-            return name[:30] + "..." if len(name) > 30 else name
-    return "Nuevo Chat"
-
-# --- GESTIÓN DE ESTADO DE LA APLICACIÓN ---
-if "saved_chats" not in st.session_state:
-    st.session_state.saved_chats = []
-if "active_chat" not in st.session_state:
-    st.session_state.active_chat = []
-
 # --- BARRA LATERAL (SIDEBAR) ---
 with st.sidebar:
-    st.header("Mis Conversaciones")
-    if st.button("➕ Nuevo Chat"):
-        st.session_state.active_chat = []
+    st.header("Sobre HEX T 1.0")
+    st.markdown("""
+    **T 1.0** es un prototipo de asistente de IA.
+    **Creador:** HEX
+    **Sede:** Matagalpa, Nicaragua 🇳🇮
+    """)
+    st.divider()
+    if st.button("Limpiar Historial"):
+        st.session_state.messages = []
         st.rerun()
 
-    st.divider()
+# --- LÓGICA DE LA IA ---
+try:
+    client = InferenceClient(
+        model="meta-llama/Meta-Llama-3-8B-Instruct",
+        token=st.secrets["HUGGINGFACE_API_TOKEN"]
+    )
+except Exception as e:
+    st.error(f"No se pudo inicializar el cliente de la API: {e}")
+    st.stop()
 
-    # Mostrar chats guardados
-    for i, chat in enumerate(st.session_state.saved_chats):
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            if st.button(chat["name"], key=f"chat_{i}", use_container_width=True):
-                st.session_state.active_chat = chat["messages"]
-                st.rerun()
-        with col2:
-            if st.button("🗑️", key=f"del_{i}"):
-                del st.session_state.saved_chats[i]
-                if not st.session_state.saved_chats:
-                    st.session_state.active_chat = []
-                st.rerun()
+def get_hex_response(user_message, chat_history):
+    """Genera una respuesta usando Llama 3."""
+    system_prompt = """
+    <|start_header_id|>system<|end_header_id|>
+    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario. Tu principal limitación es que NO tienes acceso a internet. Si te piden algo que requiera búsqueda (noticias, clima), explícalo amablemente. Nunca menciones a Meta o Llama.<|eot_id|>
+    """
+    
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    for msg in chat_history:
+        role = "user" if msg["role"] == "user" else "assistant"
+        messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
 
-# --- INTERFAZ PRINCIPAL DEL CHAT ---
+    messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
+    
+    def response_generator(stream):
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+    
+    try:
+        stream = client.chat_completion(
+            messages=messages,
+            max_tokens=1024,
+            stream=True
+        )
+        return response_generator(stream)
+    except Exception as e:
+        return iter([f"Ha ocurrido un error con la API: {e}"])
+
+# --- INTERFAZ DE STREAMLIT ---
 st.title("HEX T 1.0")
 
-# Mostrar mensajes del chat activo
-for message in st.session_state.active_chat:
-    if message["role"] == "user":
-        st.markdown(f"<div class='user-message-container'><div class='chat-bubble user-bubble'>{message['content']}</div></div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div class='bot-message-container'><div class='chat-bubble bot-bubble'>{message['content']}</div></div>", unsafe_allow_html=True)
+chat_container = st.container(height=500, border=False)
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Mostrar historial
+with chat_container:
+    st.write("<div class='chat-container'>", unsafe_allow_html=True)
+    for message in st.session_state.messages:
+        bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
+        # Escapamos el contenido para seguridad
+        content_escaped = st.markdown(message['content'])._repr_html_()
+        st.markdown(f"<div class='chat-bubble {bubble_class}'>{message['content']}</div>", unsafe_allow_html=True)
+    st.write("</div>", unsafe_allow_html=True)
 
 # Input del usuario
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt:
-    # Añade el mensaje del usuario al chat activo
-    st.session_state.active_chat.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.rerun()
 
-    # Si es el primer mensaje, guarda este chat en la lista de chats
-    if len(st.session_state.active_chat) == 1:
-        new_chat = {
-            "name": generate_chat_name(st.session_state.active_chat),
-            "messages": st.session_state.active_chat
-        }
-        st.session_state.saved_chats.append(new_chat)
+# Generar respuesta si el último mensaje es del usuario
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+    last_user_message = st.session_state.messages[-1]["content"]
     
-    # Llama a la IA para obtener la respuesta
-    with st.spinner("T 1.0 está pensando..."):
-        modelo_ia = get_model()
-        response_text = get_hex_response(modelo_ia, prompt, st.session_state.active_chat)
-        st.session_state.active_chat.append({"role": "assistant", "content": response_text})
-
-    # Refresca la página para mostrar los nuevos mensajes
+    with st.chat_message("assistant"):
+        response_stream = get_hex_response(last_user_message, st.session_state.messages[:-1])
+        
+        # Usamos st.write_stream para mostrar la respuesta palabra por palabra
+        bot_response = st.write_stream(response_stream)
+        
+    # Guardar la respuesta completa en el historial
+    st.session_state.messages.append({"role": "assistant", "content": bot_response})
+    # Forzar un último rerun para limpiar la lógica y esperar el siguiente input
     st.rerun()
