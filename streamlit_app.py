@@ -2,33 +2,12 @@ import streamlit as st
 from huggingface_hub import InferenceClient
 from PIL import Image
 import io
+import random
+from duckduckgo_search import DDGS
+import re
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
-
-# --- ESTILOS CSS PERSONALIZADOS ---
-st.markdown("""
-<style>
-    .chat-bubble {
-        padding: 10px 15px;
-        border-radius: 20px;
-        margin-bottom: 10px;
-        max-width: 75%;
-        clear: both;
-        word-wrap: break-word;
-    }
-    .user-bubble {
-        background-color: #3c415c;
-        float: right;
-        color: white;
-    }
-    .bot-bubble {
-        background-color: #262730;
-        float: left;
-        color: white;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="centered")
 
 # --- BARRA LATERAL (SIDEBAR) ---
 with st.sidebar:
@@ -53,72 +32,95 @@ except Exception as e:
     st.error(f"No se pudo inicializar el cliente de la API: {e}")
     st.stop()
 
-def get_hex_response(user_message, chat_history):
-    """Genera una respuesta usando Llama 3."""
+def search_duckduckgo(query: str):
+    """Realiza una búsqueda web y devuelve contexto y fuentes."""
+    print(f"🔎 Buscando en la web: '{query}'...")
+    try:
+        with DDGS() as ddgs:
+            results = [{"snippet": r['body'], "url": r['href']} for r in ddgs.text(query, region='wt-wt', safesearch='off', timelimit='m', max_results=3)]
+            if not results:
+                return "No se encontraron resultados relevantes.", []
+            context_text = "\n\n".join([f"Fuente: {r['snippet']}" for r in results])
+            sources = [r for r in results]
+            return context_text, sources
+    except Exception:
+        return "Error al intentar buscar en la web.", []
+
+@st.cache_data(show_spinner=False)
+def get_hex_response(_user_message, _chat_history):
+    """Genera una respuesta, decidiendo si buscar en la web primero."""
     system_prompt = """
     <|start_header_id|>system<|end_header_id|>
-    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario. Tu principal limitación es que NO tienes acceso a internet. Si te piden algo que requiera búsqueda (noticias, clima), explícalo amablemente. Nunca menciones a Meta o Llama.<|eot_id|>
+    Eres Tigre (T 1.0), un asistente de IA de HEX. Tu tono es amigable y profesional. Respondes siempre en el idioma del usuario. Tu principal limitación es que NO tienes acceso a internet. Para noticias, eventos actuales, o clima, responde ÚNICA Y EXCLUSIVAMENTE con el comando `[BUSCAR: término de búsqueda preciso]`. Nunca menciones a Meta o Llama.<|eot_id|>
     """
     
     messages = [{"role": "system", "content": system_prompt}]
-    
-    for msg in chat_history:
+    for msg in _chat_history:
         role = "user" if msg["role"] == "user" else "assistant"
         messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
+    messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{_user_message}<|eot_id|>"})
 
-    messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
-    
-    def response_generator(stream):
-        for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-    
     try:
-        stream = client.chat_completion(
-            messages=messages,
-            max_tokens=1024,
-            stream=True
-        )
-        return response_generator(stream)
+        response = client.chat_completion(messages=messages, max_tokens=150, stream=False)
+        initial_reply = response.choices[0].message.content
+
+        if "[BUSCAR:" in initial_reply:
+            query = re.search(r"\[BUSCAR:\s*(.*?)\]", initial_reply).group(1)
+            search_results, sources = search_duckduckgo(query)
+            
+            final_prompt = f"""<|start_header_id|>system<|end_header_id|>
+            Eres Tigre (T 1.0). Responde la pregunta del usuario ("{_user_message}") usando la siguiente información que encontraste en la web. Sé conciso y amigable.<|eot_id|>
+            <|start_header_id|>user<|end_header_id|>
+            Información de la web: {search_results}<|eot_id|>"""
+            
+            final_messages = [{"role": "user", "content": final_prompt}]
+            final_response = client.chat_completion(messages=final_messages, max_tokens=1024, stream=False)
+            return final_response.choices[0].message.content, sources
+        else:
+            return initial_reply, []
+            
     except Exception as e:
-        return iter([f"Ha ocurrido un error con la API: {e}"])
+        return f"Ha ocurrido un error con la API: {e}", []
 
 # --- INTERFAZ DE STREAMLIT ---
 st.title("HEX T 1.0")
 
-chat_container = st.container(height=500, border=False)
-
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Mostrar historial
-with chat_container:
-    st.write("<div class='chat-container'>", unsafe_allow_html=True)
-    for message in st.session_state.messages:
-        bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
-        # Escapamos el contenido para seguridad
-        content_escaped = st.markdown(message['content'])._repr_html_()
-        st.markdown(f"<div class='chat-bubble {bubble_class}'>{message['content']}</div>", unsafe_allow_html=True)
-    st.write("</div>", unsafe_allow_html=True)
+# Mostrar historial con los componentes nativos de Streamlit
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+        if message.get("sources"):
+            with st.expander("Fuentes Consultadas"):
+                for source in message["sources"]:
+                    st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
 
 # Input del usuario
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
-    st.rerun()
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-# Generar respuesta si el último mensaje es del usuario
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    last_user_message = st.session_state.messages[-1]["content"]
-    
     with st.chat_message("assistant"):
-        response_stream = get_hex_response(last_user_message, st.session_state.messages[:-1])
-        
-        # Usamos st.write_stream para mostrar la respuesta palabra por palabra
-        bot_response = st.write_stream(response_stream)
-        
-    # Guardar la respuesta completa en el historial
-    st.session_state.messages.append({"role": "assistant", "content": bot_response})
-    # Forzar un último rerun para limpiar la lógica y esperar el siguiente input
-    st.rerun()
+        with st.spinner("T 1.0 está pensando..."):
+            # Convertimos el historial a una tupla para que sea cacheable
+            historial_para_cache = tuple(
+                (k, tuple(v.items())) if isinstance(v, dict) else (k, v)
+                for item in st.session_state.messages[:-1]
+                for k, v in item.items()
+            )
+            
+            response_text, response_sources = get_hex_response(prompt, historial_para_cache)
+            
+            st.markdown(response_text)
+            if response_sources:
+                with st.expander("Fuentes Consultadas"):
+                    for source in response_sources:
+                        st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
+            
+            assistant_message = {"role": "assistant", "content": response_text, "sources": response_sources}
+            st.session_state.messages.append(assistant_message)
