@@ -200,14 +200,28 @@ active_messages = []
 if st.session_state.active_chat_id and st.session_state.active_chat_id in st.session_state.chats:
     active_messages = st.session_state.chats[st.session_state.active_chat_id].get("messages", [])
 
-# Renderiza el historial de chat con la nueva lógica
-for i, message in enumerate(active_messages):
-    is_user = message["role"] == "user"
-    container_class = "user-container" if is_user else "bot-container"
+# --- PEGA ESTE NUEVO BLOQUE EN SU LUGAR ---
+
+# Renderiza el historial de chat con la lógica de alineación correcta
+for message in active_messages:
+    # Determina las clases CSS para la alineación y el estilo de la burbuja
+    container_class = "user-container" if message["role"] == "user" else "bot-container"
+    bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
     
-    with st.container():
-        st.markdown(f"<div class='{container_class}'>", unsafe_allow_html=True)
-        
+    # Envuelve cada mensaje en su propio contenedor para aplicar la alineación
+    # y muestra el contenido usando st.markdown para que las negritas funcionen.
+    st.markdown(
+        f"""
+        <div class="message-container {container_class}">
+            <div class="chat-bubble {bubble_class}">
+                {message['content']}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# --- HASTA AQUÍ ---        
         # Procesar para encontrar y renderizar bloques de código
         content_parts = re.split(r"(```[\s\S]*?```)", message["content"])
         
