@@ -20,7 +20,7 @@ with st.sidebar:
         st.rerun()
     st.caption("© 2025 HEX. Todos los derechos reservados.")
 
-# --- LÓGICA DE LA IA CON HUGGING FACE Y BÚSQUEDA ---
+# --- LÓGICA DE LA IA ---
 try:
     if "HUGGINGFACE_API_TOKEN" not in st.secrets:
         st.error("No se encontró la clave de Hugging Face. Asegúrate de añadirla a los 'Secrets'.")
@@ -35,58 +35,49 @@ except Exception as e:
     st.stop()
 
 def search_duckduckgo(query: str):
-    """Realiza una búsqueda web y devuelve contexto y una lista de fuentes."""
+    """Realiza una búsqueda web priorizando resultados recientes."""
     print(f"🔎 Buscando en la web: '{query}'...")
     try:
         with DDGS() as ddgs:
-            # Obtenemos resultados más relevantes y recientes
-            results = [{"snippet": r['body'], "url": r['href']} for r in ddgs.text(query, region='wt-wt', safesearch='off', timelimit='y', max_results=5)]
+            # --- MEJORA CLAVE: timelimit='m' busca en el último mes ---
+            results = [{"snippet": r['body'], "url": r['href']} for r in ddgs.text(query, region='wt-wt', safesearch='off', timelimit='m', max_results=5)]
             if not results:
                 return "No se encontraron resultados relevantes.", []
-            context_text = "\n\n".join([f"Fuente {i+1}: {r['snippet']}" for i, r in enumerate(results)])
+            context_text = "\n\n".join([f"Fuente: {r['snippet']}" for r in results])
             sources = [r for r in results]
             return context_text, sources
     except Exception:
         return "Error al intentar buscar en la web.", []
 
-def get_hex_response(user_message, chat_history):
-    """
-    Genera una respuesta usando Llama 3 con contexto de búsqueda.
-    """
-    # 1. El código siempre busca en la web primero
-    search_context, sources = search_duckduckgo(user_message)
-    
-    # 2. Se construye el prompt final con instrucciones claras
+def get_hex_response(modelo_cliente, user_message, chat_history, web_context: str):
+    """Genera una respuesta de la IA usando el contexto de la búsqueda."""
     system_prompt = f"""
     ### PERFIL
-    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Eres amigable y vas directo al grano. Respondes siempre en el idioma del usuario.
+    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Eres amigable y directo. Respondes siempre en el idioma del usuario.
 
     ### TAREA
     Tu única tarea es responder la "Pregunta del usuario" usando la "Información de la web" que te proporciono. Actúa como si TÚ hubieras encontrado esta información.
 
     ### INSTRUCCIONES CLAVE
-    - Si la información de la web te permite responder sobre el clima, la fecha, la hora o noticias, hazlo. Esa es tu principal función.
-    - Si la información de la web no es relevante para la pregunta (por ejemplo, si el usuario solo dice "Hola"), ignora por completo la información de la web y responde de forma conversacional.
+    - Si la información de la web te permite responder sobre el **clima, la fecha, la hora o noticias actuales**, hazlo. Esa es tu principal función.
+    - Si la información de la web no es relevante para la pregunta (por ejemplo, si el usuario solo dice "cómo estás"), ignora por completo la información de la web y responde de forma conversacional.
     - Nunca menciones el "contexto" o la "búsqueda".
 
     ### INFORMACIÓN DE LA WEB
     ---
-    {search_context}
+    {web_context}
     ---
     """
     
     messages = [{"role": "system", "content": system_prompt}]
-    # Añadimos un historial más corto para no confundir al modelo
-    messages.extend(chat_history[-4:]) # Solo los últimos 4 mensajes
+    messages.extend(chat_history[-4:]) # Usamos un historial corto para mantener el contexto
     messages.append({"role": "user", "content": user_message})
 
     try:
-        # Se hace una única llamada a la API
-        response = client.chat_completion(messages=messages, max_tokens=1024, stream=False)
-        return response.choices[0].message.content, sources
-            
+        response = modelo_cliente.chat_completion(messages=messages, max_tokens=1024, stream=False)
+        return response.choices[0].message.content
     except Exception as e:
-        return f"Ha ocurrido un error con la API: {e}", []
+        return f"Ha ocurrido un error con la API: {e}"
 
 # --- INTERFAZ DE STREAMLIT ---
 st.markdown("<h1 style='text-align: center; font-size: 4em; font-weight: bold;'>HEX</h1>", unsafe_allow_html=True)
@@ -120,7 +111,7 @@ if prompt:
     with st.chat_message("assistant"):
         prompt_lower = prompt.lower().strip()
         
-        # Filtro para saludos simples
+        # Filtro para saludos simples (CAMINO RÁPIDO)
         if prompt_lower in canned_responses:
             response_text = random.choice(canned_responses[prompt_lower])
             response_sources = []
@@ -129,7 +120,9 @@ if prompt:
             # Camino de búsqueda para todo lo demás
             with st.spinner("T 1.0 está buscando en la web..."):
                 historial_para_api = st.session_state.messages[:-1]
-                response_text, response_sources = get_hex_response(prompt, historial_para_api)
+                informacion_buscada, fuentes = search_duckduckgo(prompt)
+                response_text = get_hex_response(client, prompt, historial_para_api, web_context=informacion_buscada)
+                response_sources = fuentes
                 
                 st.markdown(response_text)
                 if response_sources:
