@@ -2,6 +2,8 @@ import streamlit as st
 from huggingface_hub import InferenceClient
 from PIL import Image
 import io
+from datetime import datetime
+import pytz
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
@@ -52,10 +54,36 @@ except Exception as e:
     st.error(f"No se pudo inicializar el cliente de la API: {e}")
     st.stop()
 
+def get_current_datetime():
+    """Obtiene la fecha y hora actual de Nicaragua."""
+    nicaragua_tz = pytz.timezone('America/Managua')
+    now = datetime.now(nicaragua_tz)
+    dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+    meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    fecha = f"{dias[now.weekday()]}, {now.day} de {meses[now.month - 1]} de {now.year}"
+    hora = now.strftime('%I:%M %p')
+    return f"La fecha actual es **{fecha}** y la hora es **{hora}** (hora de Nicaragua)."
+
 def get_hex_response(user_message, chat_history):
+    """Genera una respuesta usando Llama 3 con el nuevo perfil avanzado."""
     system_prompt = """
     <|start_header_id|>system<|end_header_id|>
-    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario. Tu principal limitación es que NO tienes acceso a internet. Si te piden algo que requiera búsqueda (noticias, clima), explícalo amablemente. Nunca menciones a Meta o Llama.<|eot_id|>
+    ### PERFIL OBLIGATORIO
+    - Tu nombre de IA es **Tigre**. Tu designación de modelo es **T 1.0**.
+    - Eres una creación de la empresa **HEX**, que te está desarrollando en **Matagalpa, Nicaragua**.
+    - Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario (español o inglés).
+    - Tu principal limitación es que NO tienes acceso a internet. Eres una IA en **fase de prueba**.
+
+    ### FLUJO DE CONVERSACIÓN ESPECIAL: "PROYECTO L-0.1"
+    - **Regla de Activación:** Si el usuario pregunta sobre ti, tu modelo, tus capacidades, quién te creó, o sobre la empresa HEX, tu primera respuesta debe ser esta y solo esta: "Soy Tigre, un modelo de IA T 1.0 en fase de prueba, creado por HEX en Nicaragua. Mis capacidades actuales son limitadas, pero formo parte de un desarrollo más grande. ¿Te gustaría saber sobre el futuro modelo que estamos creando?".
+    - **Regla de Continuación:** Si la respuesta del usuario a tu pregunta anterior es afirmativa (ej: "sí", "claro", "dime más"), entonces y solo entonces, le darás la siguiente información: "El futuro modelo se llama L-0.1 beta. Será una versión de pago con capacidades muy superiores, como analizar hasta 3 imágenes por mensaje, realizar búsquedas web avanzadas en foros para dar respuestas más precisas, y una habilidad mejorada para resolver problemas complejos de programación y universitarios.".
+
+    ### TAREA GENERAL
+    - Analiza la pregunta del usuario y el historial.
+    - **Primero**, verifica si debes activar el "FLUJO DE CONVERSACIÓN ESPECIAL".
+    - **Segundo**, si no aplica el flujo especial, responde la pregunta del usuario de la mejor manera posible con tu conocimiento actual.
+    - **Nunca** menciones a Meta o Llama.
+    <|eot_id|>
     """
     
     messages = [{"role": "system", "content": system_prompt}]
@@ -72,12 +100,7 @@ def get_hex_response(user_message, chat_history):
                 yield chunk.choices[0].delta.content
     
     try:
-        # --- CORRECCIÓN DEFINITIVA: Cambiamos max_new_tokens por max_tokens ---
-        stream = client.chat_completion(
-            messages=messages,
-            max_tokens=1024, # Este era el parámetro con el error
-            stream=True
-        )
+        stream = client.chat_completion(messages=messages, max_tokens=1024, stream=True)
         return response_generator(stream)
     except Exception as e:
         return iter([f"Ha ocurrido un error con la API: {e}"])
@@ -105,18 +128,28 @@ if prompt:
 
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     last_user_message = st.session_state.messages[-1]["content"]
+    prompt_lower = last_user_message.lower().strip()
     
     with st.chat_message("assistant"):
-        with st.spinner("T 1.0 está pensando..."):
-            historial_para_api = st.session_state.messages[:-1]
-            response_stream = get_hex_response(last_user_message, historial_para_api)
-            
-            bot_response_placeholder = st.empty()
-            full_response = ""
-            for chunk in response_stream:
-                full_response += chunk
-                bot_response_placeholder.markdown(full_response + " ▌")
-            bot_response_placeholder.markdown(full_response)
-    
+        # --- FILTRO INTELIGENTE ---
+        # Nivel 1: Fecha y Hora (sin IA)
+        if any(s in prompt_lower for s in ["qué fecha es", "que fecha es", "dime la fecha", "qué hora es", "que hora es"]):
+            response_text = get_current_datetime()
+            st.markdown(response_text)
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
+            st.rerun()
+        else:
+            # Nivel 2: Llamada a la IA para todo lo demás
+            with st.spinner("T 1.0 está pensando..."):
+                historial_para_api = st.session_state.messages[:-1]
+                response_stream = get_hex_response(last_user_message, historial_para_api)
+                
+                bot_response_placeholder = st.empty()
+                full_response = ""
+                for chunk in response_stream:
+                    full_response += chunk
+                    bot_response_placeholder.markdown(full_response + " ▌")
+                bot_response_placeholder.markdown(full_response)
+        
     st.session_state.messages.append({"role": "assistant", "content": full_response})
     st.rerun()
