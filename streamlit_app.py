@@ -39,11 +39,7 @@ st.markdown("""
         word-wrap: break-word;
     }
     .user-bubble { background-color: #f0f0f0; color: #333; }
-    .bot-bubble { 
-    background-color: #2b2d31; 
-    color: #fff; 
-    margin-left: 5px; /* Añade un margen izquierdo pequeño */
-}
+    .bot-bubble { background-color: #2b2d31; color: #fff; }
 
     /* Animación de "Pensando..." (IMPLEMENTADO) */
     .thinking-animation {
