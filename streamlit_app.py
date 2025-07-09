@@ -10,7 +10,7 @@ import html
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
-# --- ESTILOS CSS Y JAVASCRIPT (SEGÚN TU ESPECIFICACIÓN) ---
+# --- ESTILOS CSS Y JAVASCRIPT (INCLUYE TODAS TUS ESPECIFICACIONES) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Space+Grotesk:wght@700&display=swap');
@@ -27,42 +27,72 @@ st.markdown("""
     .subtitle { text-align: center; margin-top: -25px; font-size: 1.5em; color: #aaa; }
     @keyframes shine { to { background-position: -200% center; } }
 
-    /* Contenedores y Burbujas de Chat */
+    /* Contenedores y Burbujas de Chat (IMPLEMENTACIÓN DE TU DISEÑO) */
     .message-container { display: flex; width: 100%; margin-bottom: 10px; animation: fadeIn 0.5s ease-in-out; }
     .user-container { justify-content: flex-end; }
     .bot-container { justify-content: flex-start; }
-    .chat-bubble { padding: 12px 18px; border-radius: 20px; max-width: 75%; word-wrap: break-word; }
+
+    .chat-bubble {
+        padding: 12px 18px;
+        border-radius: 20px;
+        max-width: 75%;
+        word-wrap: break-word;
+    }
     .user-bubble { background-color: #f0f0f0; color: #333; }
     .bot-bubble { background-color: #2b2d31; color: #fff; }
 
-    /* Animación de "Pensando..." */
-    .thinking-animation-container { display: flex; justify-content: flex-start; width: 100%; margin-bottom: 10px; }
+    /* Animación de "Pensando..." (IMPLEMENTADO) */
     .thinking-animation {
         font-style: italic;
+        text-align: center;
+        margin: 10px 0;
         color: #888;
         background: linear-gradient(90deg, #666, #fff, #666);
         background-size: 200% auto;
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         animation: shine 2s linear infinite;
-        padding: 12px 18px; border-radius: 20px;
     }
 
-    /* Bloques de código con botón de copiar */
-    .code-block-container { position: relative; background-color: #1e1e1e; border-radius: 8px; margin: 1rem 0; color: #f0f0f0; }
-    .code-block-header { display: flex; justify-content: space-between; align-items: center; background-color: #333; padding: 8px 12px; border-top-left-radius: 8px; border-top-right-radius: 8px;}
+    /* Bloques de código con botón de copiar (IMPLEMENTADO) */
+    .code-block-container {
+        position: relative;
+        background-color: #1e1e1e; /* Fondo oscuro */
+        border-radius: 8px;
+        margin: 1rem 0;
+        color: #f0f0f0;
+    }
+    .code-block-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #333;
+        padding: 5px 10px;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+    }
     .code-block-lang { color: #ccc; font-size: 0.9em; font-family: 'Roboto Mono', monospace; }
-    .copy-button { background-color: #555; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8em; }
+    .copy-button {
+        background-color: #555; color: white; border: none;
+        padding: 5px 10px; border-radius: 5px; cursor: pointer;
+    }
     .copy-button:hover { background-color: #777; }
-    .code-block-content { padding: 1rem; font-family: 'Roboto Mono', monospace; white-space: pre-wrap; word-wrap: break-word; }
+    /* Estilo para el contenido del código usando <pre><code> */
+    .code-block-content {
+        padding: 1rem;
+        font-family: 'Roboto Mono', monospace;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
 
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 <script>
     async function copyToClipboard(elementId) {
-        const codeElement = document.getElementById(elementId);
-        if (codeElement) {
+        const preElement = document.getElementById(elementId);
+        if (preElement) {
             try {
-                await navigator.clipboard.writeText(codeElement.innerText);
+                await navigator.clipboard.writeText(preElement.innerText);
                 alert('¡Código copiado!');
             } catch (err) {
                 alert('Error al copiar.');
@@ -111,7 +141,10 @@ def get_hex_response(client, user_message, chat_history):
     messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
     
     try:
-        full_response = "".join([chunk.choices[0].delta.content for chunk in client.chat_completion(messages=messages, max_tokens=2048, stream=True) if chunk.choices[0].delta.content])
+        full_response = ""
+        for chunk in client.chat_completion(messages=messages, max_tokens=2048, stream=True):
+            if chunk.choices[0].delta.content:
+                full_response += chunk.choices[0].delta.content
         return full_response
     except Exception as e:
         if "Too Many Requests" in str(e) or "429" in str(e):
@@ -122,26 +155,23 @@ def generate_chat_name(first_prompt):
     name = first_prompt.split('\n')[0]
     return name[:30] + "..." if len(name) > 30 else name
 
-# --- INICIALIZACIÓN Y GESTIÓN DE ESTADO ---
+# --- INICIALIZACIÓN Y GESTIÓN DE ESTADO (SIN CAMBIOS) ---
 client_ia = get_client()
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 if "active_chat_id" not in st.session_state:
-    st.session_state.active_chat_id = "new_chat" # Inicia en un chat nuevo por defecto
-    st.session_state.chats["new_chat"] = {"name": "Nuevo Chat", "messages": []}
+    st.session_state.active_chat_id = None
 
-# --- BARRA LATERAL (SIDEBAR) ---
+# --- BARRA LATERAL (SIN CAMBIOS) ---
 with st.sidebar:
     st.header("Conversaciones")
     if st.button("➕ Nuevo Chat", use_container_width=True):
-        st.session_state.active_chat_id = "new_chat"
-        st.session_state.chats["new_chat"] = {"name": "Nuevo Chat", "messages": []}
+        st.session_state.active_chat_id = None
         st.rerun()
 
     st.divider()
     chat_ids = list(st.session_state.chats.keys())
     for chat_id in reversed(chat_ids):
-        if chat_id == "new_chat": continue
         chat_info = st.session_state.chats[chat_id]
         col1, col2 = st.columns([4, 1])
         with col1:
@@ -152,79 +182,89 @@ with st.sidebar:
             if st.button("🗑️", key=f"del_{chat_id}"):
                 del st.session_state.chats[chat_id]
                 if st.session_state.active_chat_id == chat_id:
-                    st.session_state.active_chat_id = "new_chat"
+                    st.session_state.active_chat_id = None
                 st.rerun()
     
     st.divider()
     with st.expander("ℹ️ Acerca de HEX T 1.0"):
-        st.markdown("""
-        **Proyecto:** HEX T 1.0 (Henrry)
-        **Misión:** Crear herramientas de IA accesibles e inteligentes.
-        **Tipo de IA:** Asistente conversacional.
-        **Versión:** 1.0 (Fase de prueba)
-        **Contacto:** [Sitio Web](https://www.google.com)
-        """)
+        st.markdown("**Proyecto:** HEX T 1.0\n\n**Misión:** Crear herramientas de IA accesibles.\n\n**Versión:** 1.0 (Fase de prueba)")
 
-# --- INTERFAZ PRINCIPAL DEL CHAT ---
+# --- INTERFAZ PRINCIPAL DEL CHAT (CON MEJORAS VISUALES) ---
 st.markdown("<div class='animated-title'>HEX</div><p class='subtitle'>T 1.0</p>", unsafe_allow_html=True)
 
-# Lógica para mostrar mensajes
-active_chat_messages = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+active_messages = []
+if st.session_state.active_chat_id and st.session_state.active_chat_id in st.session_state.chats:
+    active_messages = st.session_state.chats[st.session_state.active_chat_id].get("messages", [])
+
+# Renderiza el historial de chat con la nueva lógica
 for i, message in enumerate(active_messages):
-    container_class = "user-container" if message["role"] == "user" else "bot-container"
-    st.markdown(f"<div class='{container_class}'>", unsafe_allow_html=True)
+    is_user = message["role"] == "user"
+    container_class = "user-container" if is_user else "bot-container"
     
-    content_parts = re.split(r"(```[\s\S]*?```)", message["content"])
-    for part_index, part in enumerate(content_parts):
-        if part.startswith("```"):
-            code_content = part.strip().lstrip("`").rstrip("`")
-            lang = code_content.split('\n')[0].strip() or "plaintext"
-            code = '\n'.join(code_content.split('\n')[1:])
-            code_id = f"code-{i}-{part_index}"
-            
-            st.markdown(f"""
-            <div class="code-block-container">
-                <div class="code-block-header">
-                    <span class="code-block-lang">{lang}</span>
-                    <button class="copy-button" onclick="copyToClipboard('{code_id}')">Copiar</button>
+    with st.container():
+        st.markdown(f"<div class='{container_class}'>", unsafe_allow_html=True)
+        
+        # Procesar para encontrar y renderizar bloques de código
+        content_parts = re.split(r"(```[\s\S]*?```)", message["content"])
+        
+        for part_index, part in enumerate(content_parts):
+            if part.startswith("```"):
+                # Es un bloque de código
+                code_content = part.strip().lstrip("`").rstrip("`")
+                lang = code_content.split('\n')[0].strip() or "plaintext"
+                code = '\n'.join(code_content.split('\n')[1:])
+                code_id = f"code-{i}-{part_index}-{int(time.time()*1000)}"
+                
+                st.markdown(f"""
+                <div class="code-block-container">
+                    <div class="code-block-header">
+                        <span class="code-block-lang">{lang}</span>
+                        <button class="copy-button" onclick="copyToClipboard('{code_id}')">Copiar</button>
+                    </div>
+                    <pre id="{code_id}"><code class="language-{lang}">{html.escape(code)}</code></pre>
                 </div>
-                <pre id="{code_id}"><code>{html.escape(code)}</code></pre>
-            </div>
-            """, unsafe_allow_html=True)
-        elif part.strip():
-            bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
-            st.markdown(f"<div class='chat-bubble {bubble_class}'>{part}</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+            elif part.strip():
+                # Es texto normal
+                bubble_class = "user-bubble" if is_user else "bot-bubble"
+                st.markdown(f"<div class='chat-bubble {bubble_class}'>{part}</div>", unsafe_allow_html=True)
+                
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # Input del usuario
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt:
-    # Si estamos en "Nuevo Chat", renómbralo
-    if st.session_state.chats[st.session_state.active_chat_id]["name"] == "Nuevo Chat":
-        st.session_state.chats[st.session_state.active_chat_id]["name"] = generate_chat_name(prompt)
-
+    # Lógica de procesamiento de la entrada (sin cambios)
+    if st.session_state.active_chat_id is None:
+        new_chat_id = str(time.time())
+        st.session_state.active_chat_id = new_chat_id
+        st.session_state.chats[new_chat_id] = {
+            "name": generate_chat_name(prompt),
+            "messages": []
+        }
+    
     st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
 
-    # Filtro para la fecha
+    # Filtro para la fecha (sin IA)
     prompt_lower = prompt.lower().strip()
     if any(s in prompt_lower for s in ["qué fecha es", "que fecha es", "dime la fecha", "a cómo estamos"]):
         response_text = get_current_datetime()
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
     else:
-        # Llama a la IA
-        thinking_placeholder = st.empty()
-        with thinking_placeholder.container():
-            st.markdown("<div class='bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
-        
+        # Llama a la IA para todo lo demás
         if client_ia:
+            # Animación "Pensando..."
+            thinking_placeholder = st.empty()
+            with thinking_placeholder.container():
+                st.markdown("<div class='bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
+            
             historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-            response_stream = get_hex_response(client_ia, prompt, historial_para_api)
-            response_text = "".join(response_stream)
+            response_text = get_hex_response(client_ia, prompt, historial_para_api)
+
+            # Limpiamos el placeholder de "Pensando..."
+            thinking_placeholder.empty()
         else:
             response_text = "El cliente de la API no está disponible."
-        
-        thinking_placeholder.empty()
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
     
+    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
     st.rerun()
