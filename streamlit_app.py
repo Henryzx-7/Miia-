@@ -39,9 +39,9 @@ st.markdown("""
         word-wrap: break-word;
     }
     .user-bubble { 
-    background-color: #2b2d31; 
-    color: #fff; 
-    margin-left: 10px; /* Añade un margen izquierdo pequeño */
+    background-color: #f0f0f0; 
+    color: #333; 
+    margin-right: 5px; /* Añade un margen derecho pequeño */
 }
     .bot-bubble { background-color: #2b2d31; color: #fff; }
 
