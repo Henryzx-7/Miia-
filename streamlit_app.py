@@ -7,9 +7,55 @@ import pytz
 import re
 import html
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
+# --- BLOQUE DE AUTENTICACIÓN ---
 
+# Base de datos de usuarios en memoria (en un caso real, esto vendría de una base de datos)
+# La contraseña debe ser guardada usando un hash, pero para este ejemplo es texto plano.
+VALID_USERS = {
+    "henrry": "12345",
+    "invitado": "invitado"
+}
+
+def check_login():
+    """Muestra el formulario de login y verifica las credenciales."""
+    st.set_page_config(page_title="Inicio de Sesión - HEX T 1.0", layout="centered")
+    st.header("Inicio de Sesión")
+    
+    username = st.text_input("Usuario")
+    password = st.text_input("Contraseña", type="password")
+
+    if st.button("Ingresar", use_container_width=True):
+        # Verifica las credenciales
+        if username in VALID_USERS and password == VALID_USERS[username]:
+            st.session_state.authenticated = True
+            st.session_state.username = username
+            st.rerun() # Vuelve a ejecutar el script para mostrar la app principal
+        else:
+            st.error("Usuario o contraseña incorrectos.")
+            
+# --- FIN DEL BLOQUE DE AUTENTICACIÓN ---
+
+# --- ESTRUCTURA PRINCIPAL DE LA APP ---
+
+# Inicializa el estado de autenticación
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+# Muestra el login o la app principal
+if not st.session_state.authenticated:
+    check_login()
+else:
+    # --- TODO TU CÓDIGO ANTERIOR VA AQUÍ DENTRO ---
+    # (Desde st.set_page_config hasta el final)
+    
+    # Ejemplo de cómo se vería el inicio:
+    st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
+    
+    # Saludo personalizado
+    st.sidebar.success(f"Sesión iniciada como: **{st.session_state.username}**")
+    
+    # ... y aquí sigue todo el resto del código que ya tenías
+    # (CSS, Lógica de la IA, Interfaz del Chat, etc.)
 # --- ESTILOS CSS Y JAVASCRIPT ---
 st.markdown("""
 <style>
