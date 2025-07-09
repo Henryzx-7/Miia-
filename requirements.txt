@@ -1,4 +1,3 @@
 streamlit
-google-generativeai
+huggingface-hub
 Pillow
-pytz
