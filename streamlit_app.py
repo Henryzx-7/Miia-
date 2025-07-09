@@ -201,22 +201,49 @@ for i, message in enumerate(active_messages):
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+# --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL DEL ARCHIVO ---
+
 # Input del usuario
-prompt = st.chat_input("Pregúntale algo a T 1.0...")
+prompt = st.chat_input("Pregúntale algo a T 1.0...", max_chars=500) # Límite en la propia caja de texto
 
 if prompt:
-    active_chat_id = st.session_state.active_chat_id
-    if active_chat_id == "new_chat":
-        new_chat_id = str(time.time())
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
-        st.session_state.active_chat_id = new_chat_id
-        del st.session_state.chats["new_chat"]
-    
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+    # Validación adicional del lado del servidor
+    if len(prompt) > 500:
+        st.warning("Tu mensaje es demasiado largo. Por favor, limítalo a 500 caracteres.")
+    else:
+        active_chat_id = st.session_state.active_chat_id
+        # Si es un chat nuevo, créalo
+        if active_chat_id is None or active_chat_id == "new_chat":
+            new_chat_id = str(time.time())
+            st.session_state.active_chat_id = new_chat_id
+            st.session_state.chats[new_chat_id] = {
+                "name": generate_chat_name(prompt),
+                "messages": []
+            }
+            if "new_chat" in st.session_state.chats:
+                del st.session_state.chats["new_chat"]
+        
+        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
 
+        # Lógica de respuesta
+        prompt_lower = prompt.lower().strip()
+        if any(s in prompt_lower for s in ["qué fecha es", "que fecha es", "dime la fecha", "a cómo estamos"]):
+            response_text = get_current_datetime()
+        else:
+            if client_ia:
+                thinking_placeholder = st.empty()
+                with thinking_placeholder.container():
+                    st.markdown("<div class='bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
+                
+                historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+                response_text = get_hex_response(client_ia, prompt, historial_para_api)
+
+                thinking_placeholder.empty()
+            else:
+                response_text = "El cliente de la API no está disponible."
+        
+        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
+        st.rerun()
     # Filtro para la fecha (sin IA)
     prompt_lower = prompt.lower().strip()
     if any(s in prompt_lower for s in ["qué fecha es", "que fecha es", "dime la fecha", "a cómo estamos"]):
