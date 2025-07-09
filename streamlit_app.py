@@ -8,13 +8,8 @@ import io
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
 # --- ESTILOS CSS PERSONALIZADOS PARA EL CHAT ---
-# Mantenemos solo el estilo para las burbujas de chat, que sí funciona bien.
 st.markdown("""
 <style>
-    .chat-container {
-        display: flex;
-        flex-direction: column;
-    }
     .chat-bubble {
         padding: 10px 15px;
         border-radius: 20px;
@@ -23,12 +18,12 @@ st.markdown("""
         clear: both;
     }
     .user-bubble {
-        background-color: #3c415c; /* Un color azulado/gris para el usuario */
+        background-color: #3c415c;
         float: right;
         color: white;
     }
     .bot-bubble {
-        background-color: #262730; /* Un gris más oscuro para el bot */
+        background-color: #262730;
         float: left;
         color: white;
     }
@@ -47,14 +42,10 @@ with st.sidebar:
     if st.button("Limpiar Historial"):
         st.session_state.messages = []
         st.rerun()
-    st.caption("© 2025 HEX. Todos los derechos reservados.")
 
 # --- LÓGICA DE LA IA ---
 try:
-    if "HUGGINGFACE_API_TOKEN" not in st.secrets:
-        st.error("No se encontró la clave de Hugging Face. Asegúrate de añadirla a los 'Secrets'.")
-        st.stop()
-    
+    # Se inicializa el cliente de la API de forma segura
     client = InferenceClient(
         model="meta-llama/Meta-Llama-3-8B-Instruct",
         token=st.secrets["HUGGINGFACE_API_TOKEN"]
@@ -63,74 +54,71 @@ except Exception as e:
     st.error(f"No se pudo inicializar el cliente de la API: {e}")
     st.stop()
 
-@st.cache_data
-def get_hex_response(_user_message, _chat_history):
-    """
-    Genera una respuesta usando Llama 3. Usamos _ para los argumentos que no cambian
-    y que el caché de Streamlit puede manejar de forma simple.
-    """
+# Eliminamos @st.cache_data para evitar el TypeError
+def get_hex_response(user_message, chat_history):
+    """Genera una respuesta usando Llama 3."""
     system_prompt = """
     <|start_header_id|>system<|end_header_id|>
-
-    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario (español o inglés).
-    Tu principal limitación es que NO tienes acceso a internet para buscar información en tiempo real. Si te piden algo que no puedes hacer (noticias, clima), explícalo amablemente.
-    Tu nombre de modelo es T 1.0 y tu nombre de IA es Tigre. Eres una creación de HEX en Matagalpa, Nicaragua. Nunca menciones a Meta o Llama.
+    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario. Tu principal limitación es que NO tienes acceso a internet. Si te piden algo que requiera búsqueda (noticias, clima), explícalo amablemente.
     <|eot_id|>
     """
     
     messages = [{"role": "system", "content": system_prompt}]
-    
-    # Convertimos el historial a un formato compatible
-    for msg in _chat_history:
-        role = "user" if msg["role"] == "user" else "assistant"
-        messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
-
-    messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{_user_message}<|eot_id|>"})
+    messages.extend(chat_history)
+    messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
     
     try:
-        response_stream = client.text_generation(str(messages), max_new_tokens=1024, stream=True)
+        # Usamos el método text_generation en modo streaming para una respuesta más rápida
+        response_stream = client.text_generation(
+            str(messages),
+            max_new_tokens=1024,
+            stream=True,
+            details=True,
+            return_full_text=False
+        )
         return response_stream
     except Exception as e:
-        # Devuelve el error como un string para que se pueda mostrar
         return iter([f"Ha ocurrido un error con la API: {e}"])
 
 # --- INTERFAZ DE STREAMLIT ---
 st.title("HEX T 1.0")
 
 # Contenedor para el historial del chat
-chat_container = st.container()
+chat_container = st.container(height=500, border=False)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 with chat_container:
-    # Mostramos el historial usando el nuevo diseño de CSS
-    st.write("<div class='chat-container'>", unsafe_allow_html=True)
     for message in st.session_state.messages:
+        # Usamos el diseño de CSS personalizado
         if message["role"] == "user":
             st.markdown(f"<div class='chat-bubble user-bubble'>{message['content']}</div>", unsafe_allow_html=True)
         else:
             st.markdown(f"<div class='chat-bubble bot-bubble'>{message['content']}</div>", unsafe_allow_html=True)
-    st.write("</div>", unsafe_allow_html=True)
 
 # Input del usuario al final de la página
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt:
+    # Añade y muestra el mensaje del usuario
     st.session_state.messages.append({"role": "user", "content": prompt})
+    with chat_container:
+        st.markdown(f"<div class='chat-bubble user-bubble'>{prompt}</div>", unsafe_allow_html=True)
     
-    # Llama a la IA para obtener la respuesta
-    with st.spinner("T 1.0 está pensando..."):
-        # Convertimos el historial a una tupla de diccionarios para que sea cacheable
-        historial_para_cache = tuple(frozenset(item.items()) for item in st.session_state.messages[:-1])
-        
-        response_stream = get_hex_response(prompt, historial_para_cache)
-        
-        # Muestra la respuesta en streaming
-        bot_response = st.write_stream(response_stream)
-        
-        # Guarda la respuesta completa en el historial
-        st.session_state.messages.append({"role": "assistant", "content": bot_response})
+    # Genera y muestra la respuesta del asistente en streaming
+    with chat_container:
+        with st.chat_message("assistant"):
+            # Usamos un contenedor vacío para ir "escribiendo" la respuesta
+            response_placeholder = st.empty()
+            full_response = ""
+            # Llamamos a la IA
+            response_stream = get_hex_response(prompt, st.session_state.messages)
+            for chunk in response_stream:
+                full_response += chunk
+                response_placeholder.markdown(full_response + "▌")
+            # Mostramos la respuesta final sin el cursor
+            response_placeholder.markdown(full_response)
     
-    # Refresca la página para mostrar los nuevos mensajes
-    st.rerun()
+    # Guarda la respuesta completa en el historial de la sesión
+    st.session_state.messages.append({"role": "assistant", "content": full_response})
