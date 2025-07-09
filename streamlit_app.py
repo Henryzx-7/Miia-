@@ -27,7 +27,7 @@ st.markdown("""
     @keyframes shine { to { background-position: -200% center; } }
 
     .message-container { display: flex; width: 100%; margin-bottom: 10px; animation: fadeIn 0.5s ease-in-out; }
-    .user-container { justify-content: flex-end; }
+    .user-container { justify-content: flex-end; display: flex; }
     .bot-container { justify-content: flex-start; }
     .chat-bubble { padding: 12px 18px; border-radius: 20px; max-width: 75%; word-wrap: break-word; }
     .user-bubble { background-color: #f0f0f0; color: #333; }
