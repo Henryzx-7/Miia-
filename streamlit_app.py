@@ -250,53 +250,40 @@ for i, message in enumerate(active_messages):
 
 # --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL DEL 
 
-# --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL DEL ARCHIVO ---
-
 # Input del usuario
 uploaded_file = st.file_uploader("Sube una imagen para analizar", type=["png", "jpg", "jpeg"])
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt or uploaded_file:
-    # --- LÓGICA UNIFICADA PARA MANEJAR TEXTO E IMÁGENES ---
+    user_input = prompt if prompt else "Analiza la imagen que subí."
     
-    # Determina el contenido del mensaje del usuario
-    user_input_content = prompt or "Analiza la imagen que he subido."
-    
-    # Si es un chat nuevo, se crea aquí
+    # Añade el mensaje del usuario (o la indicación de la imagen) al historial
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
         st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(user_input_content),
-            "messages": []
-        }
+        st.session_state.chats.setdefault(new_chat_id, {"name": generate_chat_name(user_input), "messages": []})
+        
+    st.session_state.chats.get(st.session_state.active_chat_id, {}).get("messages", []).append({"role": "user", "content": user_input})
     
-    # Añade el mensaje del usuario al historial
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": user_input_content})
-    
-    # Prepara la imagen si existe
-    image_to_process = None
+    # Procesa la imagen si se subió
+    image_bytes = None
     if uploaded_file:
-        try:
-            image_to_process = Image.open(uploaded_file)
-        except Exception as e:
-            st.error(f"No se pudo abrir la imagen: {e}")
-            image_to_process = None
+        image_bytes = uploaded_file.getvalue()
+        st.session_state.chats.get(st.session_state.active_chat_id, {}).get("messages", []).append({"role": "user", "content": "(Imagen adjunta)", "image": image_bytes})
 
-    # Lógica de respuesta
-    prompt_lower = (prompt or "").lower().strip()
-    if any(s in prompt_lower for s in ["qué fecha es", "que fecha es", "dime la fecha", "a cómo estamos"]):
-        response_text = get_current_datetime()
-    else:
-        if client_ia:
-            with st.spinner("T 1.0 está pensando..."):
-                historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-                
-                # Llamamos a la IA con el texto y la imagen (si existe)
-                response_text = get_hex_response(client_ia, user_input_content, historial_para_api, image=image_to_process)
-        else:
-            response_text = "El cliente de la API no está disponible."
-    
-    # Añade la respuesta de la IA al historial
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
+    with st.chat_message("assistant"):
+        with st.spinner("T 1.0 está pensando..."):
+            historial_para_api = st.session_state.chats.get(st.session_state.active_chat_id, {}).get("messages", [])
+            
+            # Llama a la función de la IA (ajusta esto si tu función 'get_hex_response' necesita la imagen de forma diferente)
+            response_stream = get_hex_response(client_ia, user_input, historial_para_api, image_bytes=image_bytes)
+            
+            bot_response_placeholder = st.empty()
+            full_response = ""
+            for chunk in response_stream:
+                full_response += chunk
+                bot_response_placeholder.markdown(full_response + " ▌")
+            bot_response_placeholder.markdown(full_response)
+            
+    st.session_state.chats.get(st.session_state.active_chat_id, {}).get("messages", []).append({"role": "assistant", "content": full_response})
     st.rerun()
