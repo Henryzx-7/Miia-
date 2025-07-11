@@ -247,66 +247,55 @@ for i, message in enumerate(active_messages):
     st.markdown("</div>", unsafe_allow_html=True)
 
 
+# --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL DEL 
+
 # --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL DEL ARCHIVO ---
 
 # Input del usuario
-prompt = st.chat_input("Pregúntale algo a T 1.0...", max_chars=500) # Límite en la propia caja de texto
+uploaded_file = st.file_uploader("Sube una imagen para analizar", type=["png", "jpg", "jpeg"])
+prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
-if prompt:
-    # Validación adicional del lado del servidor
-    if len(prompt) > 500:
-        st.warning("Tu mensaje es demasiado largo. Por favor, limítalo a 500 caracteres.")
-    else:
-        active_chat_id = st.session_state.active_chat_id
-        # Si es un chat nuevo, créalo
-        if active_chat_id is None or active_chat_id == "new_chat":
-            new_chat_id = str(time.time())
-            st.session_state.active_chat_id = new_chat_id
-            st.session_state.chats[new_chat_id] = {
-                "name": generate_chat_name(prompt),
-                "messages": []
-            }
-            if "new_chat" in st.session_state.chats:
-                del st.session_state.chats["new_chat"]
-        
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+if prompt or uploaded_file:
+    # --- LÓGICA UNIFICADA PARA MANEJAR TEXTO E IMÁGENES ---
+    
+    # Determina el contenido del mensaje del usuario
+    user_input_content = prompt or "Analiza la imagen que he subido."
+    
+    # Si es un chat nuevo, se crea aquí
+    if st.session_state.active_chat_id is None:
+        new_chat_id = str(time.time())
+        st.session_state.active_chat_id = new_chat_id
+        st.session_state.chats[new_chat_id] = {
+            "name": generate_chat_name(user_input_content),
+            "messages": []
+        }
+    
+    # Añade el mensaje del usuario al historial
+    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": user_input_content})
+    
+    # Prepara la imagen si existe
+    image_to_process = None
+    if uploaded_file:
+        try:
+            image_to_process = Image.open(uploaded_file)
+        except Exception as e:
+            st.error(f"No se pudo abrir la imagen: {e}")
+            image_to_process = None
 
-        # Lógica de respuesta
-        prompt_lower = prompt.lower().strip()
-        if any(s in prompt_lower for s in ["qué fecha es", "que fecha es", "dime la fecha", "a cómo estamos"]):
-            response_text = get_current_datetime()
-        else:
-            if client_ia:
-                thinking_placeholder = st.empty()
-                with thinking_placeholder.container():
-                    st.markdown("<div class='bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
-                
-                historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-                response_text = get_hex_response(client_ia, prompt, historial_para_api)
-
-                thinking_placeholder.empty()
-            else:
-                response_text = "El cliente de la API no está disponible."
-        
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
-        st.rerun()
-    # Filtro para la fecha (sin IA)
-    prompt_lower = prompt.lower().strip()
+    # Lógica de respuesta
+    prompt_lower = (prompt or "").lower().strip()
     if any(s in prompt_lower for s in ["qué fecha es", "que fecha es", "dime la fecha", "a cómo estamos"]):
         response_text = get_current_datetime()
     else:
-        # Llama a la IA
-        thinking_placeholder = st.empty()
-        with thinking_placeholder.container():
-            st.markdown("<div class='bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
-        
         if client_ia:
-            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-            response_text = get_hex_response(client_ia, prompt, historial_para_api)
+            with st.spinner("T 1.0 está pensando..."):
+                historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+                
+                # Llamamos a la IA con el texto y la imagen (si existe)
+                response_text = get_hex_response(client_ia, user_input_content, historial_para_api, image=image_to_process)
         else:
             response_text = "El cliente de la API no está disponible."
-        
-        thinking_placeholder.empty()
-            
+    
+    # Añade la respuesta de la IA al historial
     st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
     st.rerun()
