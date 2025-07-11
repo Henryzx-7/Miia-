@@ -6,6 +6,7 @@ from datetime import datetime
 import pytz
 import re
 import html
+from PIL import Image
 
 # --- BLOQUE DE AUTENTICACIÓN ---
 
