@@ -2,3 +2,4 @@ streamlit
 huggingface-hub
 Pillow
 duckduckgo-search
+requests
