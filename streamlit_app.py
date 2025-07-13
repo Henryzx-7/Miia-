@@ -1,149 +1,128 @@
 import streamlit as st
-import time
 from huggingface_hub import InferenceClient
+from PIL import Image
+import io
+import time
+import random
+import requests # <-- Importante añadir esta librería
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
-# --- ESTILOS CSS PERSONALIZADOS ---
+# --- ESTILOS CSS ---
 st.markdown("""
 <style>
-    /* Estilo para las burbujas de chat */
+    /* Estilos para el contenedor principal del chat y las burbujas */
+    .st-emotion-cache-1f1G2gn {
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        background-color: #0e1117;
+        padding: 1rem 1rem 1.5rem 1rem;
+        border-top: 1px solid #262730;
+    }
     .chat-bubble {
-        padding: 12px 18px;
-        border-radius: 20px;
-        margin-bottom: 10px;
-        max-width: 75%;
-        word-wrap: break-word;
-        clear: both;
+        padding: 12px 18px; border-radius: 20px; margin-bottom: 10px;
+        max-width: 75%; word-wrap: break-word; clear: both;
     }
-    .user-bubble {
-        float: right;
-        background-color: #0b93f6; /* Azul para el usuario */
-        color: white;
-    }
-    .bot-bubble {
-        float: left;
-        background-color: #2b2d31; /* Gris oscuro para el bot */
-        color: white;
-    }
+    .user-bubble { float: right; background-color: #0b93f6; color: white; }
+    .bot-bubble { float: left; background-color: #2b2d31; color: white; }
 </style>
 """, unsafe_allow_html=True)
+
 
 # --- LÓGICA DE LA IA ---
 @st.cache_resource
 def get_client():
-    """Obtiene y cachea el cliente de la API para no recargarlo."""
+    """Obtiene el cliente para el modelo de LENGUAJE (Llama 3)."""
     try:
-        return InferenceClient(
-            model="meta-llama/Meta-Llama-3-8B-Instruct",
-            token=st.secrets["HUGGINGFACE_API_TOKEN"]
-        )
+        return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
     except Exception as e:
-        st.error(f"Error al inicializar la API: {e}")
+        st.error(f"Error al inicializar la API de Llama 3: {e}")
         return None
 
-def get_hex_response(client, user_message, chat_history):
-    """Genera una respuesta de la IA."""
-    system_prompt = """<|start_header_id|>system<|end_header_id|>
-    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario. Tu principal limitación es que NO tienes acceso a internet. Si te piden algo que requiera búsqueda (noticias, clima), explícalo amablemente. Nunca menciones a Meta o Llama.<|eot_id|>"""
-    
+def get_image_caption(image_bytes: bytes, api_token: str) -> str:
+    """Obtiene la descripción de una imagen usando el modelo BLIP."""
+    API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large"
+    headers = {"Authorization": f"Bearer {api_token}"}
+    try:
+        response = requests.post(API_URL, headers=headers, data=image_bytes)
+        if response.status_code == 200:
+            return response.json()[0].get('generated_text', 'No se pudo generar una descripción.')
+        else:
+            return f"Error al analizar la imagen (Código {response.status_code}): {response.json().get('error', 'El modelo de imágenes puede estar cargándose. Intenta de nuevo en un minuto.')}"
+    except Exception as e:
+        return f"Error de conexión al analizar la imagen: {e}"
+
+def get_text_response(client, user_message, chat_history):
+    """Genera una respuesta de texto usando Llama 3."""
+    system_prompt = "<|start_header_id|>system<|end_header_id|>\nEres Tigre (T 1.0), un asistente de IA de HEX. Eres amigable y profesional. Respondes en español. No tienes acceso a internet. Si el usuario te envía una descripción de una imagen, conversa sobre ella de forma natural.<|eot_id|>"
     messages = [{"role": "system", "content": system_prompt}]
-    for msg in chat_history:
-        role = "user" if msg["role"] == "user" else "assistant"
-        messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
+    messages.extend(chat_history)
     messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
     
     try:
-        # Usamos chat_completion que es el método correcto
-        full_response = ""
-        for chunk in client.chat_completion(messages=messages, max_tokens=1024, stream=True):
-            if chunk.choices[0].delta.content:
-                full_response += chunk.choices[0].delta.content
+        full_response = "".join([chunk.choices[0].delta.content for chunk in client.chat_completion(messages=messages, max_tokens=1024, stream=True) if chunk.choices[0].delta.content])
         return full_response
     except Exception as e:
-        # Manejo de error de límite de uso
-        if "Too Many Requests" in str(e) or "429" in str(e):
-            return "⚠️ Límite de solicitudes alcanzado. Por favor, espera un minuto."
         return f"Ha ocurrido un error con la API: {e}"
-
-def generate_chat_name(first_prompt):
-    """Genera un nombre para el chat a partir del primer mensaje."""
-    name = first_prompt.split('\n')[0]
-    return name[:30] + "..." if len(name) > 30 else name
 
 # --- INICIALIZACIÓN Y GESTIÓN DE ESTADO ---
 client_ia = get_client()
-
-if "chats" not in st.session_state:
-    st.session_state.chats = {}
-if "active_chat_id" not in st.session_state:
-    st.session_state.active_chat_id = "new_chat"
-    st.session_state.chats["new_chat"] = {"name": "Nuevo Chat", "messages": []}
-
-# --- BARRA LATERAL (SIDEBAR) ---
-with st.sidebar:
-    st.header("Mis Conversaciones")
-    if st.button("➕ Nuevo Chat", use_container_width=True):
-        st.session_state.active_chat_id = "new_chat"
-        st.session_state.chats["new_chat"] = {"name": "Nuevo Chat", "messages": []}
-        st.rerun()
-
-    st.divider()
-    chat_ids = list(st.session_state.chats.keys())
-    for chat_id in reversed(chat_ids):
-        if chat_id == "new_chat": continue
-        chat_info = st.session_state.chats[chat_id]
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            if st.button(chat_info["name"], key=f"chat_{chat_id}", use_container_width=True):
-                st.session_state.active_chat_id = chat_id
-                st.rerun()
-        with col2:
-            if st.button("🗑️", key=f"del_{chat_id}"):
-                del st.session_state.chats[chat_id]
-                if st.session_state.active_chat_id == chat_id:
-                    st.session_state.active_chat_id = "new_chat"
-                st.rerun()
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 # --- INTERFAZ PRINCIPAL DEL CHAT ---
 st.title("HEX T 1.0")
+st.caption("Asistente de IA por HEX")
+st.divider()
 
-# Contenedor para el historial del chat
-chat_history_container = st.container(height=400, border=False)
+# Mostrar historial de chat
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-active_messages = st.session_state.chats[st.session_state.active_chat_id].get("messages", [])
+# Contenedor para el input y el botón de carga
+input_container = st.container()
+with input_container:
+    col1, col2 = st.columns([1, 8])
+    with col1:
+        uploaded_file = st.file_uploader(" ", label_visibility="collapsed", type=["png", "jpg", "jpeg"])
+    with col2:
+        prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
-with chat_history_container:
-    for message in active_messages:
-        # Usa el diseño de burbujas con CSS y float
-        bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
-        st.markdown(f"<div class='message-container'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
+# --- LÓGICA DE PROCESAMIENTO ---
+# 1. Procesar imagen subida
+if uploaded_file:
+    with st.chat_message("user"):
+        st.image(uploaded_file, width=200)
+    
+    with st.chat_message("assistant"):
+        with st.spinner("T 1.0 está 'viendo' la imagen..."):
+            image_bytes = uploaded_file.getvalue()
+            hf_token = st.secrets.get("HUGGINGFACE_API_TOKEN")
+            if hf_token:
+                description = get_image_caption(image_bytes, hf_token)
+                # Creamos un prompt para que la IA principal comente la descripción
+                prompt_for_llama = f"Acabo de subir una imagen y el sistema de visión la describe así: '{description}'. ¿Qué piensas o qué detalles interesantes puedes añadir?"
+                
+                with st.spinner("T 1.0 está pensando sobre la imagen..."):
+                    historial_para_api = st.session_state.messages
+                    response_text = get_text_response(client_ia, prompt_for_llama, historial_para_api)
+                    st.markdown(response_text)
+                    # Guardar ambos mensajes en el historial
+                    st.session_state.messages.append({"role": "user", "content": f"(Imagen subida: {uploaded_file.name})"})
+                    st.session_state.messages.append({"role": "assistant", "content": response_text})
 
-# Input del usuario
-prompt = st.chat_input("Pregúntale algo a T 1.0...")
-
+# 2. Procesar prompt de texto
 if prompt:
-    active_chat_id = st.session_state.active_chat_id
-    # Si es un chat nuevo, se crea aquí
-    if active_chat_id == "new_chat":
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
-        del st.session_state.chats["new_chat"]
-    
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-    # Lógica de respuesta de la IA
-    if client_ia:
+    with st.chat_message("assistant"):
         with st.spinner("T 1.0 está pensando..."):
-            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-            response_text = get_hex_response(client_ia, prompt, historial_para_api)
-            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
-    else:
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": "El cliente de la API no está disponible."})
-    
-    st.rerun()
+            historial_para_api = st.session_state.messages[:-1]
+            response_text = get_text_response(client_ia, prompt, historial_para_api)
+            st.markdown(response_text)
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
