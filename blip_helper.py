@@ -6,7 +6,7 @@ def get_image_caption(image_bytes: bytes, api_token: str) -> str:
     """
     Toma los bytes de una imagen y devuelve una descripción usando el modelo BLIP.
     """
-    API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base"
+    API_URL = "https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten"
     headers = {"Authorization": f"Bearer {api_token}"}
     
     try:
