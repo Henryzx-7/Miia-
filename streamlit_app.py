@@ -5,99 +5,129 @@ import io
 import time
 import random
 import requests
-import re
-import html
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
-# --- ESTILOS CSS PERSONALIZADOS ---
+# --- ESTILOS CSS ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Space+Grotesk:wght@700&display=swap');
-
-    /* Encabezado animado */
-    .animated-title {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 4em; font-weight: 700; text-align: center; color: #888;
-        background: linear-gradient(90deg, #555, #fff, #555);
-        background-size: 200% auto;
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        animation: shine 5s linear infinite;
+    /* Estilos para burbujas de chat */
+    .stChatMessage {
+        border-radius: 20px;
+        padding: 12px 18px;
+        margin-bottom: 10px;
+        max-width: 75%;
     }
-    .subtitle { text-align: center; margin-top: -25px; font-size: 1.5em; color: #aaa; }
-    @keyframes shine { to { background-position: -200% center; } }
-
-    /* Contenedores y Burbujas de Chat */
-    .message-container { display: flex; width: 100%; margin-bottom: 10px; animation: fadeIn 0.5s ease-in-out; }
-    .user-container { justify-content: flex-end; }
-    .bot-container { justify-content: flex-start; }
-    .chat-bubble { padding: 12px 18px; border-radius: 20px; max-width: 75%; word-wrap: break-word; }
-    .user-bubble { background-color: #f0f0f0; color: #333; }
-    .bot-bubble { background-color: #2b2d31; color: #fff; }
-
-    /* Animación de "Pensando..." */
-    .thinking-animation-container { display: flex; justify-content: flex-start; width: 100%; margin: 10px 0; }
-    .thinking-animation {
-        font-style: italic; color: #888;
-        background: linear-gradient(90deg, #666, #fff, #666);
-        background-size: 200% auto;
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        animation: shine 2s linear infinite;
-        padding: 12px 18px; border-radius: 20px;
+    /* Mensajes del usuario (derecha) */
+    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-user"]) {
+        background-color: #0b93f6;
+        color: white;
+    }
+    /* Mensajes del bot (izquierda) */
+    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-assistant"]) {
         background-color: #2b2d31;
+        color: white;
     }
-
-    /* Bloques de código */
-    .code-block-container { position: relative; background-color: #1e1e1e; border-radius: 8px; margin: 1rem 0; color: #f0f0f0; }
-    .code-block-header { display: flex; justify-content: space-between; align-items: center; background-color: #333; padding: 8px 12px; border-top-left-radius: 8px; border-top-right-radius: 8px;}
-    .code-block-lang { color: #ccc; font-size: 0.9em; font-family: 'Roboto Mono', monospace; }
-    .copy-button { background-color: #555; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8em; }
-    .copy-button:hover { background-color: #777; }
-
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
-<script>
-    async function copyToClipboard(elementId) {
-        const codeElement = document.getElementById(elementId);
-        if (codeElement) {
-            try {
-                await navigator.clipboard.writeText(codeElement.innerText);
-                alert('¡Código copiado!');
-            } catch (err) {
-                alert('Error al copiar.');
-            }
-        }
-    }
-</script>
 """, unsafe_allow_html=True)
 
-# --- LÓGICA DE LA IA Y FUNCIONES AUXILIARES ---
+# --- LÓGICA DE LA IA ---
 @st.cache_resource
 def get_client():
+    """Obtiene y cachea el cliente de la API para no recargarlo."""
     try:
-        return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
+        return InferenceClient(
+            model="meta-llama/Meta-Llama-3-8B-Instruct",
+            token=st.secrets["HUGGINGFACE_API_TOKEN"]
+        )
     except Exception as e:
         st.error(f"Error al inicializar la API: {e}")
         return None
 
 def get_image_caption(image_bytes: bytes, api_token: str) -> str:
+    """Obtiene la descripción de una imagen usando un modelo de visión."""
     API_URL = "https://api-inference.huggingface.co/models/nlpconnect/vit-gpt2-image-captioning"
     headers = {"Authorization": f"Bearer {api_token}"}
     try:
         response = requests.post(API_URL, headers=headers, data=image_bytes)
         response.raise_for_status()
-        return response.json()[0]['generated_text']
-    except requests.exceptions.RequestException as e:
-        return f"Error al analizar la imagen: {e}"
+        return response.json()[0].get('generated_text', 'No se pudo generar una descripción.')
+    except Exception as e:
+        return f"El modelo de imágenes está ocupado o no disponible. Intenta de nuevo más tarde."
 
-def get_hex_response(client, user_message, chat_history):
-    system_prompt = """<|start_header_id|>system<|end_header_id|>
-    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX en Matagalpa, Nicaragua. Eres amigable, directo y profesional. Respondes siempre en español. si tienes acceso a internet. Si te piden analizar una imagen, responde que te acaban de implementar esa función y pregunta si la quieren probar.<|eot_id|>"""
+def get_text_response(client, user_message, chat_history):
+    """Genera una respuesta de texto usando Llama 3."""
+    system_prompt = "<|start_header_id|>system<|end_header_id|>\nEres Tigre (T 1.0), un asistente de IA de HEX. Eres amigable y profesional. Respondes en español. No tienes acceso a internet en tiempo real.<|eot_id|>"
     messages = [{"role": "system", "content": system_prompt}]
-    for msg in chat_history:
-        role = "user" if msg["role"] == "user" else "assistant"
-        messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
+    messages.extend(chat_history)
     messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
+    
     try:
-        full_response = "".join(chunk.choices[0].delta.content for chunk in client.chat_completion(messages=messages, max_tokens=2048, stream=True) if chunk.choices[0].delta.content)
+        full_response = ""
+        for chunk in client.chat_completion(messages=messages, max_tokens=1024, stream=True):
+            if chunk.choices[0].delta.content:
+                full_response += chunk.choices[0].delta.content
+        return full_response
+    except Exception as e:
+        return f"Ha ocurrido un error con la API: {e}"
+
+# --- INICIALIZACIÓN Y GESTIÓN DE ESTADO ---
+client_ia = get_client()
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# --- INTERFAZ PRINCIPAL DEL CHAT ---
+st.title("HEX T 1.0")
+st.caption("Asistente de IA por HEX")
+st.divider()
+
+# Mostrar historial de chat
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# --- LÓGICA DE INPUT ---
+uploaded_file = st.file_uploader("Sube una imagen para analizar:", type=["png", "jpg", "jpeg"])
+prompt = st.chat_input("Pregúntale algo a T 1.0...")
+
+# 1. Procesar imagen subida
+if uploaded_file is not None:
+    # Añade la imagen al historial visual
+    st.session_state.messages.append({"role": "user", "content": f"Imagen subida: {uploaded_file.name}"})
+    with st.chat_message("user"):
+        st.image(uploaded_file, width=200)
+
+    # Procesa la imagen y muestra la descripción
+    with st.chat_message("assistant"):
+        with st.spinner("T 1.0 está 'viendo' la imagen..."):
+            image_bytes = uploaded_file.getvalue()
+            hf_token = st.secrets.get("HUGGINGFACE_API_TOKEN")
+            
+            if hf_token:
+                description = get_image_caption(image_bytes, hf_token)
+                st.markdown(description)
+                st.session_state.messages.append({"role": "assistant", "content": description})
+            else:
+                st.error("La clave de API de Hugging Face no está configurada.")
+    
+    # Reinicia el estado del cargador de archivos para que no se procese de nuevo
+    st.rerun()
+
+# 2. Procesar prompt de texto
+if prompt:
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        with st.spinner("T 1.0 está pensando..."):
+            if client_ia:
+                # Preparamos un historial que solo contiene texto para la IA de texto
+                historial_para_api = [msg for msg in st.session_state.messages if msg.get("type") != "image"]
+                response_text = get_text_response(client_ia, prompt, historial_para_api)
+                st.markdown(response_text)
+                st.session_state.messages.append({"role": "assistant", "content": response_text})
+            else:
+                st.error("El cliente de la API de texto no está disponible.")
