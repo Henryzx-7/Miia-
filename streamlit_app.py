@@ -1,10 +1,7 @@
 import streamlit as st
 from huggingface_hub import InferenceClient
-from PIL import Image
-import io
 import time
 import random
-import requests
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
@@ -12,122 +9,120 @@ st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 # --- ESTILOS CSS ---
 st.markdown("""
 <style>
-    /* Estilos para burbujas de chat */
-    .stChatMessage {
-        border-radius: 20px;
-        padding: 12px 18px;
-        margin-bottom: 10px;
-        max-width: 75%;
-    }
-    /* Mensajes del usuario (derecha) */
-    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-user"]) {
-        background-color: #0b93f6;
-        color: white;
-    }
-    /* Mensajes del bot (izquierda) */
-    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-assistant"]) {
-        background-color: #2b2d31;
-        color: white;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Space+Grotesk:wght@700&display=swap');
+    /* Estilos del encabezado, burbujas de chat, etc. */
+    .animated-title { font-family: 'Space Grotesk', sans-serif; font-size: 4em; font-weight: 700; text-align: center; color: #888; background: linear-gradient(90deg, #555, #fff, #555); background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: shine 5s linear infinite; }
+    .subtitle { text-align: center; margin-top: -25px; font-size: 1.5em; color: #aaa; }
+    @keyframes shine { to { background-position: -200% center; } }
+    .message-container { display: flex; width: 100%; margin-bottom: 10px; animation: fadeIn 0.5s ease-in-out; }
+    .user-container { justify-content: flex-end; }
+    .bot-container { justify-content: flex-start; }
+    .chat-bubble { padding: 12px 18px; border-radius: 20px; max-width: 75%; word-wrap: break-word; }
+    .user-bubble { background-color: #f0f0f0; color: #333; }
+    .bot-bubble { background-color: #2b2d31; color: #fff; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 """, unsafe_allow_html=True)
 
 # --- LÓGICA DE LA IA ---
 @st.cache_resource
 def get_client():
-    """Obtiene y cachea el cliente de la API para no recargarlo."""
     try:
-        return InferenceClient(
-            model="meta-llama/Meta-Llama-3-8B-Instruct",
-            token=st.secrets["HUGGINGFACE_API_TOKEN"]
-        )
+        return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
     except Exception as e:
         st.error(f"Error al inicializar la API: {e}")
         return None
 
-def get_image_caption(image_bytes: bytes, api_token: str) -> str:
-    """Obtiene la descripción de una imagen usando un modelo de visión."""
-    API_URL = "https://api-inference.huggingface.co/models/nlpconnect/vit-gpt2-image-captioning"
-    headers = {"Authorization": f"Bearer {api_token}"}
-    try:
-        response = requests.post(API_URL, headers=headers, data=image_bytes)
-        response.raise_for_status()
-        return response.json()[0].get('generated_text', 'No se pudo generar una descripción.')
-    except Exception as e:
-        return f"El modelo de imágenes está ocupado o no disponible. Intenta de nuevo más tarde."
-
-def get_text_response(client, user_message, chat_history):
-    """Genera una respuesta de texto usando Llama 3."""
-    system_prompt = "<|start_header_id|>system<|end_header_id|>\nEres Tigre (T 1.0), un asistente de IA de HEX. Eres amigable y profesional. Respondes en español. No tienes acceso a internet en tiempo real.<|eot_id|>"
+def get_hex_response(client, user_message, chat_history):
+    system_prompt = """<|start_header_id|>system<|end_header_id|>
+    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable y profesional. Respondes siempre en español. No tienes acceso a internet ni puedes analizar imágenes. Si te piden una de esas funciones, explica amablemente que son capacidades de una futura versión.<|eot_id|>"""
+    
     messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(chat_history)
+    for msg in chat_history:
+        role = "user" if msg["role"] == "user" else "assistant"
+        messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
     messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
     
     try:
-        full_response = ""
-        for chunk in client.chat_completion(messages=messages, max_tokens=1024, stream=True):
-            if chunk.choices[0].delta.content:
-                full_response += chunk.choices[0].delta.content
-        return full_response
+        # Usamos st.write_stream para una respuesta fluida
+        response_stream = client.chat_completion(messages=messages, max_tokens=1024, stream=True)
+        return response_stream
     except Exception as e:
-        return f"Ha ocurrido un error con la API: {e}"
+        if "Too Many Requests" in str(e) or "429" in str(e):
+            return iter(["⚠️ Límite de solicitudes alcanzado. Por favor, espera un minuto."])
+        return iter([f"Ha ocurrido un error con la API: {e}"])
+
+def generate_chat_name(first_prompt):
+    name = first_prompt.split('\n')[0]
+    return name[:30] + "..." if len(name) > 30 else name
 
 # --- INICIALIZACIÓN Y GESTIÓN DE ESTADO ---
 client_ia = get_client()
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if "chats" not in st.session_state:
+    st.session_state.chats = {}
+    st.session_state.active_chat_id = None
 
-# --- INTERFAZ PRINCIPAL DEL CHAT ---
-st.title("HEX T 1.0")
-st.caption("Asistente de IA por HEX")
-st.divider()
+# --- BARRA LATERAL ---
+with st.sidebar:
+    st.header("Conversaciones")
+    if st.button("➕ Nuevo Chat", use_container_width=True):
+        st.session_state.active_chat_id = None
+        st.rerun()
 
-# Mostrar historial de chat
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    st.divider()
+    chat_ids = list(st.session_state.chats.keys())
+    for chat_id in reversed(chat_ids):
+        chat_info = st.session_state.chats[chat_id]
+        if st.button(chat_info["name"], key=f"chat_{chat_id}", use_container_width=True):
+            st.session_state.active_chat_id = chat_id
+            st.rerun()
 
-# --- LÓGICA DE INPUT ---
-uploaded_file = st.file_uploader("Sube una imagen para analizar:", type=["png", "jpg", "jpeg"])
+# --- INTERFAZ PRINCIPAL ---
+st.markdown("<div class='animated-title'>HEX</div><p class='subtitle'>T 1.0</p>", unsafe_allow_html=True)
+
+# Define el chat activo
+active_chat = None
+if st.session_state.active_chat_id:
+    active_chat = st.session_state.chats[st.session_state.active_chat_id]
+else:
+    # Si no hay chat activo, muestra un mensaje de bienvenida
+    st.info("Selecciona un chat o inicia uno nuevo para comenzar.")
+
+# Muestra el historial del chat activo
+if active_chat:
+    for message in active_chat["messages"]:
+        container_class = "user-container" if message["role"] == "user" else "bot-container"
+        bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
+        st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
+
+# Input del usuario
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
-# 1. Procesar imagen subida
-if uploaded_file is not None:
-    # Añade la imagen al historial visual
-    st.session_state.messages.append({"role": "user", "content": f"Imagen subida: {uploaded_file.name}"})
-    with st.chat_message("user"):
-        st.image(uploaded_file, width=200)
-
-    # Procesa la imagen y muestra la descripción
-    with st.chat_message("assistant"):
-        with st.spinner("T 1.0 está 'viendo' la imagen..."):
-            image_bytes = uploaded_file.getvalue()
-            hf_token = st.secrets.get("HUGGINGFACE_API_TOKEN")
-            
-            if hf_token:
-                description = get_image_caption(image_bytes, hf_token)
-                st.markdown(description)
-                st.session_state.messages.append({"role": "assistant", "content": description})
-            else:
-                st.error("La clave de API de Hugging Face no está configurada.")
-    
-    # Reinicia el estado del cargador de archivos para que no se procese de nuevo
-    st.rerun()
-
-# 2. Procesar prompt de texto
 if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
+    # Si no hay un chat activo, crea uno nuevo
+    if st.session_state.active_chat_id is None:
+        new_chat_id = str(time.time())
+        st.session_state.active_chat_id = new_chat_id
+        st.session_state.chats[new_chat_id] = {
+            "name": generate_chat_name(prompt),
+            "messages": []
+        }
+    
+    # Añade el mensaje del usuario al historial activo
+    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+    
+    # Llama a la IA para obtener la respuesta
+    if client_ia:
         with st.spinner("T 1.0 está pensando..."):
-            if client_ia:
-                # Preparamos un historial que solo contiene texto para la IA de texto
-                historial_para_api = [msg for msg in st.session_state.messages if msg.get("type") != "image"]
-                response_text = get_text_response(client_ia, prompt, historial_para_api)
-                st.markdown(response_text)
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
-            else:
-                st.error("El cliente de la API de texto no está disponible.")
+            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+            response_stream = get_hex_response(client_ia, prompt, historial_para_api)
+            
+            # Usamos st.write_stream para la animación de escritura
+            response_text = st.write_stream(response_stream)
+            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
+    else:
+        response_text = "El cliente de la API no está disponible."
+        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
+
+    st.rerun()
