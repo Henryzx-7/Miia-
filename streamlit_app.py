@@ -170,18 +170,17 @@ if active:
     msgs = st.session_state.chats[active]["messages"]
     with chat_area:
         for i, m in enumerate(msgs):
-            container_class = "user-container" if m["role"] == "user" else "bot-container"
-            bubble_class = "user-bubble" if m["role"] == "user" else "bot-bubble"
+    container_class = "user-container" if m["role"] == "user" else "bot-container"
+    bubble_class = "user-bubble" if m["role"] == "user" else "bot-bubble"
 
-            st.markdown(f"<div class='message-container {container_class}'>", unsafe_allow_html=True)
+    st.markdown(f"<div class='message-container {container_class}'>", unsafe_allow_html=True)
 
-            if m["role"] == "assistant" and "image_bytes" in m:
-    st.image(BytesIO(m["image_bytes"]), caption=m["content"], use_container_width=True)
-else:
-    st.markdown(f"<div class='chat-bubble {bubble_class}'>{m['content']}</div>", unsafe_allow_html=True)
+    if m["role"] == "assistant" and "image_bytes" in m:
+        st.image(BytesIO(m["image_bytes"]), caption=m["content"], use_container_width=True)
+    else:
+        st.markdown(f"<div class='chat-bubble {bubble_class}'>{m['content']}</div>", unsafe_allow_html=True)
 
-            st.markdown("</div>", unsafe_allow_html=True)
-
+    st.markdown("</div>", unsafe_allow_html=True)
 # Botón + en la barra de chat
 with st.container():
     col_input, col_toggle = st.columns([10, 1])
