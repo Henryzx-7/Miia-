@@ -8,7 +8,7 @@ import requests, base64, io
 
 def generar_imagen_flux(prompt, token):
     headers = {"Authorization": f"Bearer {token}"}
-    payload = {"inputs": prompt}
+    payload = {"prompt": prompt}  # <- CORREGIDO
     response = requests.post(
         "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev",
         headers=headers,
@@ -204,7 +204,7 @@ with st.container():
     col1, col2 = st.columns([10, 1])
     with col1:
         prompt = st.chat_input(
-            "Describe una imagen o escribe tu mensaje...", 
+            "Escribele lo que quieras...", 
             key="chat_input"
         )
     with col2:
@@ -243,30 +243,30 @@ if prompt:
     # Modo texto o imagen según la selección
     if st.session_state.modo_generacion == "texto":
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
-        st.rerun()  # Provocará que la IA responda más abajo
-else:
-    st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+        st.rerun()
+    else:
+        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
 
-    # 👉 Mostrar animación "Generando imagen..."
-    with chat_container:
-        imagen_placeholder = st.empty()
-        with imagen_placeholder.container():
-            st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos porque muchos usuarios la están usando.</div></div>", unsafe_allow_html=True)
+        # 👇 Mostrar animación
+        with chat_container:
+            imagen_placeholder = st.empty()
+            with imagen_placeholder.container():
+                st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos porque muchos usuarios la están usando.</div></div>", unsafe_allow_html=True)
 
-    try:
-        imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
-        buffer = io.BytesIO()
-        imagen.save(buffer, format="PNG")
-        st.session_state.chats[chat_id]["messages"].append({
-            "role": "assistant",
-            "content": prompt,
-            "image_bytes": buffer.getvalue()
-        })
-    except Exception as e:
-        st.session_state.chats[chat_id]["messages"].append({
-            "role": "assistant",
-            "content": f"❌ Error generando imagen: {e}"
-        })
+        try:
+            imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
+            buffer = io.BytesIO()
+            imagen.save(buffer, format="PNG")
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": prompt,
+                "image_bytes": buffer.getvalue()
+            })
+        except Exception as e:
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": f"❌ Error generando imagen: {e}"
+            })
 
-    imagen_placeholder.empty()  # 👈 Elimina el letrero de cargando
-    st.rerun()
+        imagen_placeholder.empty()
+        st.rerun()
