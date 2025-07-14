@@ -205,10 +205,6 @@ if user_input:
     if st.session_state.modo_generacion == "texto":
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
     else:
-
-
-        
-    # Generaciónde imagen como respuesta en el chat
     try:
         img = generar_imagen_flux(user_input, st.secrets["HUGGINGFACE_API_TOKEN"])
         
