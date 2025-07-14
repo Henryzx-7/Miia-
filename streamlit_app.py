@@ -163,35 +163,55 @@ st.markdown("<div class='animated-title'>HEX</div><p class='subtitle'>T 1.0</p>"
 modo = st.radio("Modo de entrada:", ["texto", "imagen"], index=0 if st.session_state.modo_generacion=="texto" else 1, key="modo_radio")
 st.session_state.modo_generacion = modo
 
-# --- GENERADOR DE IMÁGENES ---
-if modo=="imagen":
-    prompt_img = st.text_input("Prompt para imagen:")
-    if st.button("Generar imagen"):
-        if prompt_img:
-            try:
-                img = generar_imagen_flux(prompt_img, st.secrets["HUGGINGFACE_API_TOKEN"])
-                st.image(img, caption="Imagen generada", use_container_width=True)
-            except Exception as e:
-                st.error(f"No se pudo generar: {e}")
-        else:
-            st.warning("Ingresá un prompt primero.")
-
 # --- CHAT ---
 chat_area = st.container()
 active = st.session_state.active_chat_id
 if active:
     msgs = st.session_state.chats[active]["messages"]
     with chat_area:
-        for i,m in enumerate(msgs):
-            cls = "user-bubble" if m["role"]=="user" else "bot-bubble"
-            st.markdown(f"<div class='message-container {'user-container' if m['role']=='user' else 'bot-container'}'><div class='chat-bubble {cls}'>{m['content']}</div></div>", unsafe_allow_html=True)
+        for i, m in enumerate(msgs):
+    container_class = "user-container" if m["role"] == "user" else "bot-container"
+    st.markdown(f"<div class='message-container {container_class}'>", unsafe_allow_html=True)
+    
+    if isinstance(m["content"], Image.Image):
+        st.image(m["content"], use_column_width=True)
+    else:
+        bubble_class = "user-bubble" if m["role"] == "user" else "bot-bubble"
+        st.markdown(f"<div class='chat-bubble {bubble_class}'>{m['content']}</div>", unsafe_allow_html=True)
 
-if prompt:=st.chat_input("Escribí algo..."):
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# Botón + en la barra de chat
+col_input, col_toggle = st.columns([10, 1])
+with col_toggle:
+    if st.button("➕", key="toggle_modo"):
+        st.session_state.modo_generacion = "imagen" if st.session_state.modo_generacion == "texto" else "texto"
+
+# Entrada del usuario (texto o prompt de imagen)
+if st.session_state.modo_generacion == "texto":
+    user_input = st.chat_input("Escribí algo...")
+else:
+    user_input = st.chat_input("Describe la imagen que querés generar...")
+
+if user_input:
     if not st.session_state.active_chat_id:
         cid = str(time.time())
         st.session_state.active_chat_id = cid
-        st.session_state.chats[cid]={"name":generate_chat_name(prompt),"messages":[]}
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role":"user","content":prompt})
+        st.session_state.chats[cid] = {"name": generate_chat_name(user_input), "messages": []}
+
+    chat_id = st.session_state.active_chat_id
+
+    if st.session_state.modo_generacion == "texto":
+        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
+    else:
+        # Generación de imagen como respuesta en el chat
+        try:
+            img = generar_imagen_flux(user_input, st.secrets["HUGGINGFACE_API_TOKEN"])
+            st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
+            st.session_state.chats[chat_id]["messages"].append({"role": "assistant", "content": img})
+        except Exception as e:
+            st.session_state.chats[chat_id]["messages"].append({"role": "assistant", "content": f"❌ Error al generar imagen: {e}"})
+
     st.rerun()
 
 if active and st.session_state.chats[active]["messages"]:
