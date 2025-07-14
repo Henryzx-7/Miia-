@@ -3,6 +3,22 @@ import streamlit as st
 from huggingface_hub import InferenceClient
 import time
 import random
+from PIL import Image
+import requests, base64, io
+
+def generar_imagen_flux(prompt, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"inputs": prompt}
+    response = requests.post(
+        "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev",
+        headers=headers,
+        json=payload
+    )
+    if response.status_code != 200:
+        raise Exception(f"Error en la API: {response.status_code} - {response.text}")
+    
+    image = Image.open(io.BytesIO(response.content))
+    return image
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
@@ -53,6 +69,31 @@ st.markdown("""
         animation: shine 2s linear infinite;
         padding: 12px 18px;
         border-radius: 20px;
+    }
+    .chat-row {
+        display: flex;
+        align-items: center;
+    }
+    .plus-button {
+        font-size: 1.5em;
+        margin-left: 10px;
+        cursor: pointer;
+    }
+    .modo-popup {
+        background-color: #2b2d31;
+        padding: 10px;
+        border-radius: 10px;
+        margin-top: -80px;
+        position: absolute;
+        right: 100px;
+        z-index: 9999;
+    }
+    .modo-popup label {
+        color: white;
+        font-size: 0.9em;
+        display: block;
+        margin-bottom: 5px;
+        cursor: pointer;
     }
 
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -125,13 +166,17 @@ if st.session_state.active_chat_id:
         for message in active_messages:
             container_class = "user-container" if message["role"] == "user" else "bot-container"
             bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
-            st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
 
+            if "image_bytes" in message:
+                st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
+                st.image(io.BytesIO(message["image_bytes"]), use_column_width=True)
+            else:
+                st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
 # Lógica de respuesta (se ejecuta después de renderizar el historial)
 if st.session_state.active_chat_id and st.session_state.chats[st.session_state.active_chat_id]["messages"]:
     last_message = st.session_state.chats[st.session_state.active_chat_id]["messages"][-1]
     # Si el último mensaje es del usuario, la IA necesita responder
-    if last_message["role"] == "user":
+    if last_message["role"] == "user" and st.session_state.modo_generacion == "texto":
         with chat_container:
             # Muestra la animación de "Pensando..."
             thinking_placeholder = st.empty()
@@ -148,12 +193,43 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             # Limpia el "Pensando..." y refresca
             thinking_placeholder.empty()
             st.rerun()
+            # Inicializa el modo si no existe
+if "modo_generacion" not in st.session_state:
+    st.session_state.modo_generacion = "texto"
+if "mostrar_selector" not in st.session_state:
+    st.session_state.mostrar_selector = False
 
 # Input del usuario al final de la página
-prompt = st.chat_input("Pregúntale algo a T 1.0...")
+with st.container():
+    col1, col2 = st.columns([10, 1])
+    with col1:
+        prompt = st.chat_input(
+            "Describe una imagen o escribe tu mensaje...", 
+            key="chat_input"
+        )
+    with col2:
+        if st.button("➕", key="plus_button", help="Cambiar modo"):
+            st.session_state.mostrar_selector = not st.session_state.mostrar_selector
 
+# Selector flotante de modo
+if st.session_state.mostrar_selector:
+    st.markdown("""
+    <div class="modo-popup">
+        <label><input type="radio" name="modo" value="texto" onclick="window.location.href='?modo=texto'"> Modo Texto</label>
+        <label><input type="radio" name="modo" value="imagen" onclick="window.location.href='?modo=imagen'"> Modo Imagen</label>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Detectar el modo desde URL temporal
+query_params = st.experimental_get_query_params()
+if "modo" in query_params:
+    nuevo_modo = query_params["modo"][0]
+    st.session_state.modo_generacion = nuevo_modo
+    st.experimental_set_query_params()  # Limpia la URL
+
+# 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 if prompt:
-    # Si no hay un chat activo, crea uno nuevo
+    # Si no hay chat activo, se crea uno
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
         st.session_state.active_chat_id = new_chat_id
@@ -161,7 +237,27 @@ if prompt:
             "name": generate_chat_name(prompt),
             "messages": []
         }
-    
-    # Añade el mensaje del usuario y refresca INMEDIATAMENTE
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
-    st.rerun()
+
+    chat_id = st.session_state.active_chat_id
+
+    # Modo texto o imagen según la selección
+    if st.session_state.modo_generacion == "texto":
+        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+        st.rerun()  # Provocará que la IA responda más abajo
+    else:
+        try:
+            st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+            imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
+            buffer = io.BytesIO()
+            imagen.save(buffer, format="PNG")
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": prompt,
+                "image_bytes": buffer.getvalue()
+            })
+        except Exception as e:
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": f"❌ Error generando imagen: {e}"
+            })
+        st.rerun()
