@@ -2,7 +2,6 @@ import streamlit as st
 from huggingface_hub import InferenceClient
 import time
 import random
-from image_generator import generate_image
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
@@ -149,9 +148,7 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             thinking_placeholder.empty()
             st.rerun()
 
-# --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL DEL ARCHIVO ---
-
-# Input del usuario
+# Input del usuario al final de la página
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt:
@@ -164,28 +161,6 @@ if prompt:
             "messages": []
         }
     
-    # Añade el mensaje del usuario al historial del chat activo
+    # Añade el mensaje del usuario y refresca INMEDIATAMENTE
     st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
-    
-    # Lógica de respuesta
-    with st.chat_message("assistant"):
-        with st.spinner("T 1.0 está pensando..."):
-            if client_ia:
-                # Prepara el historial correcto para la API
-                historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-                
-                # Llama a la IA con los argumentos correctos
-                response_text = get_hex_response(client_ia, prompt, historial_para_api)
-                
-                # Muestra la respuesta
-                st.markdown(response_text)
-                
-                # Añade la respuesta del bot al historial
-                st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
-            else:
-                st.error("El cliente de la API no está disponible.")
-    
-    # Refresca la página para mostrar los nuevos mensajes
     st.rerun()
-
-# --- FIN DEL NUEVO BLOQUE ---
