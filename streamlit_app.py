@@ -2,6 +2,8 @@ import streamlit as st
 from huggingface_hub import InferenceClient
 import time
 import random
+from web_tools import buscar_en_web
+import re
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
@@ -68,10 +70,31 @@ def get_client():
         st.error(f"No se pudo inicializar la API: {e}")
         return None
 
-def get_hex_response(client, user_message, chat_history):
-    system_prompt = """<|start_header_id|>system<|end_header_id|>
-    tu nombre legitimo es Tigre, Tu modelo es T 1.0, un asistente de IA de HEX. Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario. Solo tienes una limitacion que no te pueden mandar imagenes pero si tienes mensajeria ilimitada ni tampoco la busqueda en la web esas son funciones de pago del futurista modelo L. Si te piden algo que requiera búsqueda (noticias, clima), explícalo amablemente. Nunca menciones a Meta o Llama, puedes programar medianamete como Varias IA, siempre que te hagan preguntas sobre la empresa que te creo (HEX) di que son de nicaragua y que haran un futuro modelo hermano tuyo llamado L 0.1 preview y tendran mas ventajas y sera accecibles para todos pero con limitaciones, La empresa que te creo se llama HEX y es de Nicaragua, Matagalpa, fuiste creado por expertos, Presentate una sola vez almenos que te pregunten de nuevo, no menciones a cada rato quien te creo solo si te preguntan.<|eot_id|>"""
-    
+# Reemplaza la función get_hex_response completa
+def get_hex_response(client, user_message, chat_history, web_context=None):
+    """Genera una respuesta, usando contexto web si se proporciona."""
+    # Si hay contexto web, el prompt se enfoca en resumirlo
+    if web_context:
+        system_prompt = f"""<|start_header_id|>system<|end_header_id|>
+        Eres Tigre (T 1.0), un asistente de IA de HEX. Tu tarea es responder la "Pregunta del usuario" usando la "Información de la web" que te proporciono. Actúa como si TÚ hubieras encontrado esta información. Sé conciso, profesional y responde en español.
+
+        ### INFORMACIÓN DE LA WEB
+        {web_context}
+        <|eot_id|>"""
+    # Si no hay contexto, es una conversación normal
+    else:
+        system_prompt = """<|start_header_id|>system<|end_header_id|>
+        Eres Tigre, tu modelo es (T 1.0), un asistente de IA de HEX. Tu tono es amigable y profesional. Respondes en español. No tienes acceso a internet.<|eot_id|>"""
+
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(chat_history)
+    messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
+
+    try:
+        full_response = "".join([chunk.choices[0].delta.content for chunk in client.chat_completion(messages=messages, max_tokens=1024, stream=True) if chunk.choices[0].delta.content])
+        return full_response
+    except Exception as e:
+        return f"Ha ocurrido un error con la API: {e}"    
     messages = [{"role": "system", "content": system_prompt}]
     for msg in chat_history:
         role = "user" if msg["role"] == "user" else "assistant"
@@ -126,41 +149,39 @@ if st.session_state.active_chat_id:
             bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
             st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
 
-# Lógica de respuesta (se ejecuta después de renderizar el historial)
-if st.session_state.active_chat_id and st.session_state.chats[st.session_state.active_chat_id]["messages"]:
-    last_message = st.session_state.chats[st.session_state.active_chat_id]["messages"][-1]
-    # Si el último mensaje es del usuario, la IA necesita responder
-    if last_message["role"] == "user":
-        with chat_container:
-            # Muestra la animación de "Pensando..."
-            thinking_placeholder = st.empty()
-            with thinking_placeholder.container():
-                st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
-            
-            # Llama a la IA
-            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-            response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
-            
-            # Añade la respuesta al historial
-            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
-            
-            # Limpia el "Pensando..." y refresca
-            thinking_placeholder.empty()
-            st.rerun()
+# --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL ---
+if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+    last_user_message = st.session_state.messages[-1]["content"]
 
-# Input del usuario al final de la página
-prompt = st.chat_input("Pregúntale algo a T 1.0...")
+    with st.chat_message("assistant"):
+        with st.spinner("T 1.0 está pensando..."):
+            # Palabras clave que activan la búsqueda
+            search_triggers = ["noticia", "actual", "hoy", "quién ganó", "cuando es", "clima"]
+            prompt_lower = last_user_message.lower().strip()
 
-if prompt:
-    # Si no hay un chat activo, crea uno nuevo
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
-    
-    # Añade el mensaje del usuario y refresca INMEDIATAMENTE
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+            response_text = ""
+            response_sources = []
+
+            # Si el prompt contiene una palabra clave, se activa la búsqueda
+            if any(trigger in prompt_lower for trigger in search_triggers):
+                context, sources = buscar_en_web(last_user_message)
+                # Llamamos a la IA con el contexto de la web
+                response_text = get_hex_response(client_ia, last_user_message, st.session_state.messages, web_context=context)
+                response_sources = sources
+            else:
+                # Si no, es una conversación normal sin búsqueda
+                response_text = get_hex_response(client_ia, last_user_message, st.session_state.messages)
+
+            st.markdown(response_text)
+            if response_sources:
+                with st.expander("Fuentes Consultadas"):
+                    for source in response_sources:
+                        st.markdown(f"- [{source['snippet'][:60]}...]({source['url']})")
+
+    # Guarda la respuesta final en el historial
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": response_text,
+        "sources": response_sources
+    })
     st.rerun()
