@@ -106,6 +106,8 @@ if "chats" not in st.session_state:
     st.session_state.chats = {}
 if "active_chat_id" not in st.session_state:
     st.session_state.active_chat_id = None
+if "modo_generacion" not in st.session_state:
+    st.session_state.modo_generacion = "texto"
 
 # --- BARRA LATERAL ---
 with st.sidebar:
@@ -171,18 +173,30 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             st.rerun()
 
 # Input del usuario al final de la página
-prompt = st.chat_input("Pregúntale algo a T 1.0...")
+# Botón "+" para cambiar entre modos
+with st.expander("➕ Opciones de entrada"):
+    modo = st.radio("Seleccioná qué querés hacer:", ["texto", "imagen"], index=0 if st.session_state.modo_generacion == "texto" else 1)
+    st.session_state.modo_generacion = modo
+prompt = st.chat_input("Escribí algo para T 1.0...")
 
 if prompt:
-    # Si no hay un chat activo, crea uno nuevo
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
-    
-    # Añade el mensaje del usuario y refresca INMEDIATAMENTE
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
-    st.rerun()
+    if st.session_state.modo_generacion == "imagen":
+        # Generar imagen con FLUX
+        with st.spinner("Generando imagen..."):
+            try:
+                image = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
+                st.image(image, caption="Imagen generada", use_column_width=True)
+            except Exception as e:
+                st.error(f"No se pudo generar la imagen: {e}")
+    else:
+        # MODO TEXTO NORMAL
+        if st.session_state.active_chat_id is None:
+            new_chat_id = str(time.time())
+            st.session_state.active_chat_id = new_chat_id
+            st.session_state.chats[new_chat_id] = {
+                "name": generate_chat_name(prompt),
+                "messages": []
+            }
+
+        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+        st.rerun()
