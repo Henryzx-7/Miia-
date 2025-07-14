@@ -204,10 +204,8 @@ if user_input:
 
     if st.session_state.modo_generacion == "texto":
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
-    else:
-    # 'try' y 'except' deben estar a este mismo nivel de indentación
+else:
     try:
-        # El código aquí dentro va un nivel más profundo
         img = generar_imagen_flux(user_input, st.secrets["HUGGINGFACE_API_TOKEN"])
         
         buffer = BytesIO()
@@ -222,13 +220,11 @@ if user_input:
         })
 
     except Exception as e:
-        # El código aquí dentro también va un nivel más profundo
         st.session_state.chats[chat_id]["messages"].append({
             "role": "assistant",
             "content": f"❌ Error al generar imagen: {e}"
         })
 
-    # Esta línea se ejecuta después del try-except
     st.rerun()
 
 if active and st.session_state.chats[active]["messages"]:
