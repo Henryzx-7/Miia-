@@ -200,30 +200,36 @@ if user_input:
         st.session_state.active_chat_id = cid
         st.session_state.chats[cid] = {"name": generate_chat_name(user_input), "messages": []}
 
+    # ✅ Aquí sí obtenemos correctamente el chat_id
     chat_id = st.session_state.active_chat_id
 
     if st.session_state.modo_generacion == "texto":
-        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
-else:
-    try:
-        img = generar_imagen_flux(user_input, st.secrets["HUGGINGFACE_API_TOKEN"])
-        
-        buffer = BytesIO()
-        img.save(buffer, format="PNG")
-        img_bytes = buffer.getvalue()
-
-        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
         st.session_state.chats[chat_id]["messages"].append({
-            "role": "assistant",
-            "content": user_input,
-            "image_bytes": img_bytes
+            "role": "user",
+            "content": user_input
         })
+    else:
+        try:
+            img = generar_imagen_flux(user_input, st.secrets["HUGGINGFACE_API_TOKEN"])
+            
+            buffer = BytesIO()
+            img.save(buffer, format="PNG")
+            img_bytes = buffer.getvalue()
 
-    except Exception as e:
-        st.session_state.chats[chat_id]["messages"].append({
-            "role": "assistant",
-            "content": f"❌ Error al generar imagen: {e}"
-        })
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "user",
+                "content": user_input
+            })
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": user_input,
+                "image_bytes": img_bytes
+            })
+        except Exception as e:
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": f"❌ Error al generar imagen: {e}"
+            })
 
     st.rerun()
 
