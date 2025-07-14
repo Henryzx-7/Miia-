@@ -169,7 +169,7 @@ if st.session_state.active_chat_id:
 
             if "image_bytes" in message:
                 st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
-                st.image(io.BytesIO(message["image_bytes"]), use_column_width=True)
+                st.image(io.BytesIO(message["image_bytes"]), use_container_width=True)
             else:
                 st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
 # Lógica de respuesta (se ejecuta después de renderizar el historial)
@@ -245,8 +245,8 @@ if prompt:
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
         st.rerun()  # Provocará que la IA responda más abajo
     else:
+        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
         try:
-            st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
             imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
             buffer = io.BytesIO()
             imagen.save(buffer, format="PNG")
