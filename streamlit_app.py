@@ -26,7 +26,7 @@ def get_client():
         st.error(f"Error al inicializar la API: {e}")
         return None
 
-def generar_imagen_flux(prompt, token):
+def generar_imagen_sd(prompt, token):
     headers = {"Authorization": f"Bearer {token}"}
     payload = {"inputs": prompt}
     resp = requests.post("https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev", headers=headers, json=payload)
