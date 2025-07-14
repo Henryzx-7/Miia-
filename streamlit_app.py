@@ -127,8 +127,6 @@ with st.sidebar:
 # --- INTERFAZ PRINCIPAL DEL CHAT ---
 st.markdown("<div class='animated-title'>HEX</div><p class='subtitle'>T 1.0</p>", unsafe_allow_html=True)
 
-st.markdown("### 🎨 Generar Imagen con IA")
-
 with st.expander("Haz clic para generar una imagen a partir de texto"):
     prompt_img = st.text_input("Describe la imagen que quieres generar:")
     if st.button("Generar Imagen"):
