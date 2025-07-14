@@ -2,6 +2,7 @@ import streamlit as st
 from huggingface_hub import InferenceClient
 import time
 import random
+from image_generator import generate_image
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
