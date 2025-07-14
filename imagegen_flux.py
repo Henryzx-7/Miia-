@@ -1,27 +1,25 @@
-def generar_imagen_flux(prompt, token):
-    import requests, base64, io
+def generar_imagen_sd(prompt, token):
+    import requests
+    import io
     from PIL import Image
+    import base64
 
-    headers = {"Authorization": f"Bearer {token}"}
-    payload = {"inputs": prompt}
-    
-    response = requests.post(
-        "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev",
-        headers=headers,
-        json=payload
-    )
+    url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json"
+    }
+    payload = {
+        "inputs": prompt,
+    }
 
-    if response.status_code != 200:
-        raise Exception(f"Error {response.status_code}: {response.text}")
+    response = requests.post(url, headers=headers, json=payload)
 
-    try:
-        # La respuesta es una imagen como base64
-        result = response.json()
-        image_base64 = result.get("image_base64") or result.get("data", {}).get("image_base64")
-        if not image_base64:
-            raise Exception("No se encontró imagen_base64 en la respuesta.")
-        
-        image_data = base64.b64decode(image_base64)
-        return Image.open(io.BytesIO(image_data))
-    except Exception as e:
-        raise Exception(f"Error al procesar la imagen: {e}")
+    if response.status_code == 200:
+        image_bytes = response.content
+        try:
+            return Image.open(io.BytesIO(image_bytes))
+        except Exception as e:
+            raise ValueError("No se pudo decodificar la imagen: " + str(e))
+    else:
+        raise ValueError(f"No se pudo generar: {response.text}")
