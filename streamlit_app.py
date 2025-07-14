@@ -208,24 +208,24 @@ with st.container():
             key="chat_input"
         )
     with col2:
-        if st.button("+", key="plus_button", help="Cambiar modo"):
+        if st.button("➕", key="plus_button", help="Cambiar modo"):
             st.session_state.mostrar_selector = not st.session_state.mostrar_selector
 
 # Selector flotante de modo
+# Selector flotante de modo (usando st.radio en lugar de HTML)
 if st.session_state.mostrar_selector:
-    st.markdown("""
-    <div class="modo-popup">
-        <label><input type="radio" name="modo" value="texto" onclick="window.location.href='?modo=texto'"> Modo Texto</label>
-        <label><input type="radio" name="modo" value="imagen" onclick="window.location.href='?modo=imagen'"> Modo Imagen</label>
-    </div>
-    """, unsafe_allow_html=True)
-
+    with st.container():
+        modo = st.radio(
+            "Selecciona el modo:",
+            ["texto", "imagen"],
+            index=0 if st.session_state.modo_generacion == "texto" else 1,
+            key="modo_radio",
+            label_visibility="collapsed"
+        )
+        st.session_state.modo_generacion = modo
 # Detectar el modo desde URL temporal
-query_params = st.experimental_get_query_params()
-if "modo" in query_params:
-    nuevo_modo = query_params["modo"][0]
-    st.session_state.modo_generacion = nuevo_modo
-    st.experimental_set_query_params()  # Limpia la URL
+# (Ya no es necesario usar query_params porque usamos st.radio)
+pass  # Eliminamos esta parte
 
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 if prompt:
