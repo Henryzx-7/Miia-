@@ -74,7 +74,7 @@ st.markdown("""
 @st.cache_resource
 def get_client():
     try:
-        return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
+        return InferenceClient(model="meta-llama/Llama-2-7b-chat-hf", token=st.secrets["HUGGINGFACE_API_TOKEN"])
     except Exception as e:
         st.error(f"No se pudo inicializar la API: {e}")
         return None
@@ -185,7 +185,7 @@ if prompt:
         with st.spinner("Generando imagen..."):
             try:
                 image = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
-                st.image(image, caption="Imagen generada", use_column_width=True)
+                st.image(image, caption="Imagen generada", use_container_width=True)
             except Exception as e:
                 st.error(f"No se pudo generar la imagen: {e}")
     else:
