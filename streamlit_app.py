@@ -4,14 +4,16 @@ import time
 import random
 from datetime import datetime
 import pytz
+import re
+import html
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
-# --- ESTILOS CSS SIMPLIFICADOS Y ESTABLES ---
+# --- ESTILOS CSS Y JAVASCRIPT ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Space+Grotesk:wght@700&display=swap');
 
     /* Encabezado animado */
     .animated-title {
@@ -24,27 +26,43 @@ st.markdown("""
     }
     .subtitle { text-align: center; margin-top: -25px; font-size: 1.5em; color: #aaa; }
     @keyframes shine { to { background-position: -200% center; } }
+
+    /* Contenedores y Burbujas de Chat */
+    .message-container { display: flex; width: 100%; margin-bottom: 10px; animation: fadeIn 0.5s ease-in-out; }
+    .user-container { justify-content: flex-end; }
+    .bot-container { justify-content: flex-start; }
+    .chat-bubble { padding: 12px 18px; border-radius: 20px; max-width: 75%; word-wrap: break-word; }
+    .user-bubble { background-color: #f0f0f0; color: #333; }
+    .bot-bubble { background-color: #2b2d31; color: #fff; }
+
+    /* Animación de "Pensando..." */
+    .thinking-animation { font-style: italic; color: #888; }
+
+    /* Bloques de código */
+    .code-block-container { position: relative; background-color: #1e1e1e; border-radius: 8px; margin: 1rem 0; }
+    .code-block-header { display: flex; justify-content: space-between; align-items: center; background-color: #333; padding: 8px 12px; border-top-left-radius: 8px; border-top-right-radius: 8px;}
+    .copy-button { background-color: #555; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
     
-    /* Personalización de las burbujas de chat nativas */
-    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-user"]) {
-        background-color: #f0f0f0;
-        border-radius: 20px;
-    }
-     div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-assistant"]) {
-        background-color: #2b2d31;
-        border-radius: 20px;
-    }
-    /* Cambia el color del texto del usuario para que sea legible */
-    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-user"]) div[data-testid="stMarkdownContainer"] p {
-        color: #333;
-    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
+<script>
+    async function copyToClipboard(elementId) {
+        const preElement = document.getElementById(elementId);
+        if (preElement) {
+            try {
+                await navigator.clipboard.writeText(preElement.innerText);
+                alert('¡Código copiado!');
+            } catch (err) {
+                alert('Error al copiar.');
+            }
+        }
+    }
+</script>
 """, unsafe_allow_html=True)
 
-# --- LÓGICA DE LA IA Y FUNCIONES AUXILIARES ---
+# --- LÓGICA DE LA IA ---
 @st.cache_resource
 def get_client():
-    """Obtiene y cachea el cliente de la API para no recargarlo."""
     try:
         return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
     except Exception as e:
@@ -52,31 +70,35 @@ def get_client():
         return None
 
 def get_current_datetime():
-    """Obtiene la fecha actual universal (UTC)."""
     now_utc = datetime.now(pytz.utc)
-    return f"Claro, la fecha universal (UTC) de hoy es **{now_utc.strftime('%A, %d de %B de %Y')}**."
+    return f"La fecha universal (UTC) de hoy es **{now_utc.strftime('%A, %d de %B de %Y')}**."
 
 def get_hex_response(client, user_message, chat_history):
-    """Genera una respuesta de la IA."""
     system_prompt = """<|start_header_id|>system<|end_header_id|>
-    Eres Tigre (T 1.0), un asistente de IA de la empresa HEX. Tu tono es amigable y profesional. Respondes en español. No tienes acceso a internet ni puedes analizar imágenes. Si te piden algo que no puedes hacer, explícalo amablemente.<|eot_id|>"""
+    Eres Tigre (T 1.0), un asistente de IA de HEX. Tu tono es formal, directo y preciso. Respondes siempre en español. No tienes acceso a internet. Si te piden buscar, explica amablemente que es una función futura.<|eot_id|>"""
     
+    # --- CORRECCIÓN EN EL FORMATEO DEL HISTORIAL ---
     messages = [{"role": "system", "content": system_prompt}]
     for msg in chat_history:
-        role = "user" if msg["role"] == "user" else "assistant"
-        messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{msg['content']}<|eot_id|>"})
+        # Aseguramos que el contenido sea siempre un string
+        content = str(msg.get("content", ""))
+        role = "user" if msg.get("role") == "user" else "assistant"
+        # Aplicamos el formato especial de Llama 3
+        messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}<|eot_id|>"})
+    
     messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
     
     try:
-        # Se obtiene la respuesta completa para máxima estabilidad
-        response = client.chat_completion(messages=messages, max_tokens=2048, stream=False)
-        return response.choices[0].message.content
+        full_response = ""
+        for chunk in client.chat_completion(messages=messages, max_tokens=2048, stream=True):
+            if chunk.choices[0].delta.content:
+                full_response += chunk.choices[0].delta.content
+        return full_response
     except Exception as e:
         return f"Ha ocurrido un error con la API: {e}"
 
 def generate_chat_name(first_prompt):
-    """Genera un nombre para el chat a partir del primer mensaje."""
-    name = first_prompt.split('\n')[0]
+    name = str(first_prompt).split('\n')[0]
     return name[:30] + "..." if len(name) > 30 else name
 
 # --- INICIALIZACIÓN Y GESTIÓN DE ESTADO ---
@@ -104,38 +126,31 @@ with st.sidebar:
 # --- INTERFAZ PRINCIPAL DEL CHAT ---
 st.markdown("<div class='animated-title'>HEX</div><p class='subtitle'>T 1.0</p>", unsafe_allow_html=True)
 
-# Define el chat activo
-active_chat_messages = []
+# Lógica para mostrar historial
+active_messages = []
 if st.session_state.active_chat_id:
     active_messages = st.session_state.chats[st.session_state.active_chat_id].get("messages", [])
 
-# Muestra el historial usando los componentes nativos de Streamlit
 for message in active_messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+    container_class = "user-container" if message["role"] == "user" else "bot-container"
+    bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
+    st.markdown(f"<div class='{container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
 
 # Input del usuario
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt:
-    # Si no hay un chat activo, crea uno nuevo
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
         st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
+        st.session_state.chats[new_chat_id] = {"name": generate_chat_name(prompt), "messages": []}
     
-    # Añade el mensaje del usuario al historial
     st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
-    
-    # Lógica de respuesta
+
     prompt_lower = prompt.lower().strip()
     if any(s in prompt_lower for s in ["qué fecha es", "que fecha es", "dime la fecha"]):
         response_text = get_current_datetime()
     else:
-        # Llama a la IA para todo lo demás
         if client_ia:
             with st.spinner("T 1.0 está pensando..."):
                 historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
@@ -143,6 +158,5 @@ if prompt:
         else:
             response_text = "El cliente de la API no está disponible."
             
-    # Añade la respuesta del bot al historial
     st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
     st.rerun()
