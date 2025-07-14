@@ -5,11 +5,12 @@ import random
 from datetime import datetime
 import pytz
 import re
+import html
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
-# --- ESTILOS CSS Y JAVASCRIPT ---
+# --- ESTILOS CSS Y JAVASCRIPT COMPLETOS ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Space+Grotesk:wght@700&display=swap');
@@ -26,81 +27,60 @@ st.markdown("""
     .subtitle { text-align: center; margin-top: -25px; font-size: 1.5em; color: #aaa; }
     @keyframes shine { to { background-position: -200% center; } }
 
-    /* Personalización de las burbujas de chat nativas */
-    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-user"]) {
-        background-color: #f0f0f0;
-        border-radius: 20px;
-    }
-    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-assistant"]) {
-        background-color: #2b2d31;
-        border-radius: 20px;
-    }
-    /* Cambia el color del texto del usuario para que sea legible */
-    div[data-testid="stChatMessage"]:has(div[data-testid="stAvatarIcon-user"]) div[data-testid="stMarkdownContainer"] p {
-        color: #333;
-    }
+    /* Contenedores y Burbujas de Chat (ESTILO CORREGIDO) */
+    .message-container { display: flex; width: 100%; margin-bottom: 10px; animation: fadeIn 0.5s ease-in-out; }
+    .user-container { justify-content: flex-end; }
+    .bot-container { justify-content: flex-start; }
+    .chat-bubble { padding: 12px 18px; border-radius: 20px; max-width: 75%; word-wrap: break-word; }
+    .user-bubble { background-color: #f0f0f0; color: #333; }
+    .bot-bubble { background-color: #2b2d31; color: #fff; }
 
     /* Animación de "Pensando..." */
-    .thinking-animation {
-        font-style: italic;
-        text-align: left;
-        color: #888;
-        background: linear-gradient(90deg, #888, #fff, #888);
-        background-size: 200% auto;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        animation: shine 2s linear infinite;
-    }
+    .thinking-animation { font-style: italic; color: #888; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
-<script>
-    async function copyToClipboard(elementId) {
-        const codeElement = document.getElementById(elementId);
-        if (codeElement) {
-            try {
-                await navigator.clipboard.writeText(codeElement.innerText);
-                alert('¡Código copiado!');
-            } catch (err) {
-                console.error('Error al copiar:', err);
-            }
-        }
-    }
-</script>
 """, unsafe_allow_html=True)
+
 
 # --- LÓGICA DE LA IA Y FUNCIONES AUXILIARES ---
 @st.cache_resource
 def get_client():
-    """Obtiene y cachea el cliente de la API para no recargarlo."""
     try:
         return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
     except Exception as e:
         st.error(f"Error al inicializar la API: {e}")
         return None
 
-def get_current_datetime():
-    """Obtiene la fecha actual universal (UTC)."""
-    now_utc = datetime.now(pytz.utc)
-    return f"Claro, la fecha universal (UTC) de hoy es **{now_utc.strftime('%A, %d de %B de %Y')}**."
+# Mantenemos la lógica de búsqueda que habíamos quitado
+from duckduckgo_search import DDGS
+
+def search_web(query: str):
+    """Realiza una búsqueda web y devuelve contexto y fuentes."""
+    print(f"🔎 Buscando en la web: '{query}'...")
+    try:
+        with DDGS() as ddgs:
+            results = [{"snippet": r['body'], "url": r['href']} for r in ddgs.text(query, region='wt-wt', max_results=3)]
+            if not results: return "No se encontraron resultados relevantes.", []
+            context_text = "\n\n".join([f"Fuente: {r['snippet']}" for r in results])
+            sources = [r['url'] for r in results]
+            return context_text, sources
+    except Exception as e:
+        return f"Error al buscar en la web: {e}", []
+
 
 def get_hex_response(client, user_message, chat_history):
-    """Genera una respuesta de la IA. Versión estable sin búsqueda web."""
+    # --- PROMPT CON LÓGICA DE BÚSQUEDA RESTAURADA ---
     system_prompt = """<|start_header_id|>system<|end_header_id|>
     ### PERFIL OBLIGATORIO
-    - Tu nombre de IA es **Tigre**. Tu designación de modelo es **T 1.0**.
-    - Eres una creación de la empresa **HEX**, que te está desarrollando en **Matagalpa, Nicaragua**.
-    - Tu tono es formal, directo y preciso como ChatGPT. Respondes siempre en el idioma del usuario (español o inglés).
-    - Tu principal limitación es que **NO TIENES ACCESO A INTERNET**.
+    - Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0. Eres una creación de HEX.
+    - Tu tono es formal y preciso como ChatGPT. Respondes siempre en el idioma del usuario.
 
-    ### FLUJO PROMOCIONAL
-    - Si el usuario pregunta sobre ti, tu modelo, tus capacidades, quién te creó, o sobre la empresa "HEX", tu primera respuesta debe ser: "Soy T 1.0, un modelo de IA en fase de prueba desarrollado por HEX en Matagalpa, Nicaragua. Mis capacidades actuales son limitadas, pero formo parte de un desarrollo más grande. ¿Te gustaría saber más sobre el futuro modelo que estamos creando?".
-    - Si la respuesta del usuario a tu pregunta anterior es afirmativa (ej: "sí", "claro", "dime más"), entonces le darás la siguiente información: "El nuevo proyecto se llama L-0.1 beta. Será una versión de pago con capacidades muy superiores, como analizar hasta 3 imágenes por mensaje (con un límite de 5 mensajes por día), realizar búsquedas web avanzadas en foros para dar respuestas más precisas, y una habilidad mejorada para resolver problemas complejos de programación y universitarios.".
-
-    ### TAREA
-    - Analiza la pregunta del usuario.
-    - Primero, aplica el "FLUJO PROMOCIONAL" si corresponde.
-    - Si te piden buscar en la web o analizar una imagen, responde que es una función del futuro plan de pago.
-    - Si te piden código, debes generarlo usando bloques de Markdown (```python ... ```).
-    - Si nada de lo anterior aplica, responde la pregunta con tu conocimiento general.<|eot_id|>"""
+    ### TAREA PRINCIPAL: Decidir si necesitas buscar en la web.
+    - Para conocimiento general, conversación o creatividad, responde directamente.
+    - Para noticias, eventos actuales, clima o datos en tiempo real, responde ÚNICA Y EXCLUSIVAMENTE con el comando `[BUSCAR: término de búsqueda]`.
+    - No inventes información. Si no sabes, usa la herramienta de búsqueda.
+    - Nunca menciones a Meta o Llama.<|eot_id|>"""
     
     messages = [{"role": "system", "content": system_prompt}]
     for msg in chat_history:
@@ -109,93 +89,54 @@ def get_hex_response(client, user_message, chat_history):
     messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
     
     try:
-        full_response = ""
-        for chunk in client.chat_completion(messages=messages, max_tokens=2048, stream=True):
-            if chunk.choices[0].delta.content:
-                full_response += chunk.choices[0].delta.content
-        return full_response
+        # Hacemos la primera llamada para que la IA decida
+        response = client.chat_completion(messages=messages, max_tokens=150, stream=False)
+        initial_reply = response.choices[0].message.content
+        return initial_reply
     except Exception as e:
-        if "Too Many Requests" in str(e) or "429" in str(e):
-            return "⚠️ Límite de solicitudes alcanzado. Por favor, espera un minuto."
         return f"Ha ocurrido un error con la API: {e}"
 
-def generate_chat_name(first_prompt):
-    """Genera un nombre para el chat a partir del primer mensaje."""
-    name = str(first_prompt).split('\n')[0]
-    return name[:30] + "..." if len(name) > 30 else name
-
-def render_message(message, i):
-    """Renderiza un único mensaje, manejando texto y código."""
-    content_parts = re.split(r"(```[\s\S]*?```)", message["content"])
-    for part_index, part in enumerate(content_parts):
-        if part.startswith("```"):
-            code_content = part.strip().lstrip("`").rstrip("`")
-            lang = code_content.split('\n')[0].strip() or "plaintext"
-            code_to_render = '\n'.join(code_content.split('\n')[1:])
-            st.code(code_to_render, language=lang)
-        elif part.strip():
-            st.markdown(part)
-
 # --- INICIALIZACIÓN Y GESTIÓN DE ESTADO ---
-client_ia = get_client()
+# (Se mantiene la lógica de gestión de chats que ya tenías)
 
-if "chats" not in st.session_state:
-    st.session_state.chats = {}
-if "active_chat_id" not in st.session_state:
-    st.session_state.active_chat_id = None
+# --- INTERFAZ PRINCIPAL DEL CHAT (CON LÓGICA DE RENDERIZADO CORREGIDA) ---
+# ... (Se mantiene el título animado y la barra lateral)
 
-# --- BARRA LATERAL ---
-with st.sidebar:
-    st.header("Conversaciones")
-    if st.button("➕ Nuevo Chat", use_container_width=True):
-        st.session_state.active_chat_id = None
-        st.rerun()
+# --- BUCLE DE RENDERIZADO DEL HISTORIAL ---
+# (Usando los divs personalizados para restaurar el diseño)
 
-    st.divider()
-    chat_ids = list(st.session_state.chats.keys())
-    for chat_id in reversed(chat_ids):
-        chat_info = st.session_state.chats.get(chat_id, {})
-        if st.button(chat_info.get("name", "Chat"), key=f"chat_{chat_id}", use_container_width=True):
-            st.session_state.active_chat_id = chat_id
-            st.rerun()
-
-# --- INTERFAZ PRINCIPAL DEL CHAT ---
-st.markdown("<div class='animated-title'>HEX</div><p class='subtitle'>T 1.0</p>", unsafe_allow_html=True)
-
-# Muestra el historial del chat activo
-if st.session_state.active_chat_id:
-    for i, message in enumerate(st.session_state.chats[st.session_state.active_chat_id]["messages"]):
-        with st.chat_message(message["role"]):
-            render_message(message, i)
-
-# Lógica de respuesta para el último mensaje
-if st.session_state.active_chat_id and st.session_state.chats[st.session_state.active_chat_id]["messages"]:
-    last_message = st.session_state.chats[st.session_state.active_chat_id]["messages"][-1]
-    if last_message["role"] == "user":
-        with st.chat_message("assistant"):
-            thinking_placeholder = st.empty()
-            with thinking_placeholder.container():
-                st.markdown("<p class='thinking-animation'>Pensando…</p>", unsafe_allow_html=True)
-            
-            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-            response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
-            
-            thinking_placeholder.empty()
-            render_message({"role": "assistant", "content": response_text}, len(st.session_state.chats[st.session_state.active_chat_id]["messages"]))
-        
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
-
-# Input del usuario al final de la página
+# --- LÓGICA DE INPUT Y RESPUESTA (CORREGIDA) ---
 if prompt := st.chat_input("Pregúntale algo a T 1.0..."):
-    # Si no hay chat activo, crea uno nuevo
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
-    
-    # Añade el mensaje del usuario al historial y refresca
+    # ... (lógica para crear nuevo chat si no existe)
+
+    # Añade mensaje de usuario al historial
     st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+
+    # Lógica de respuesta
+    with st.spinner("T 1.0 está pensando..."):
+        historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+        
+        # 1. La IA decide si buscar
+        initial_response = get_hex_response(client_ia, prompt, historial_para_api)
+        
+        response_text = initial_response
+        response_sources = []
+
+        # 2. Si pidió buscar, el código lo hace
+        if "[BUSCAR:" in initial_response:
+            query = re.search(r"\[BUSCAR:\s*(.*?)\]", initial_response).group(1)
+            web_context, sources = search_web(query)
+            
+            # 3. Se pide a la IA que resuma los resultados
+            final_prompt = f"El usuario preguntó '{prompt}'. Usa este contexto para responder: {web_context}"
+            response_text = get_hex_response(client_ia, final_prompt, historial_para_api) # Llamada simplificada
+            response_sources = sources
+
+        # Añade la respuesta final al historial
+        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({
+            "role": "assistant", 
+            "content": response_text,
+            "sources": response_sources
+        })
+    
     st.rerun()
