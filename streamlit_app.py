@@ -1,13 +1,24 @@
+from imagegen_flux import generar_imagen_flux
 import streamlit as st
 from huggingface_hub import InferenceClient
 import time
 import random
+# Función para generar imágenes con FLUX.1-dev
+def generar_imagen_flux(prompt, token):
+    import requests
+    import base64
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"inputs": prompt}
+    response = requests.post("https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev", headers=headers, json=payload)
+    image_data = response.content
+    return image_data
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
 # --- ESTILOS CSS Y JAVASCRIPT ---
 st.markdown("""
+
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Space+Grotesk:wght@700&display=swap');
 
@@ -114,6 +125,17 @@ with st.sidebar:
 # --- INTERFAZ PRINCIPAL DEL CHAT ---
 st.markdown("<div class='animated-title'>HEX</div><p class='subtitle'>T 1.0</p>", unsafe_allow_html=True)
 
+st.markdown("### 🎨 Generar Imagen con IA")
+
+with st.expander("Haz clic para generar una imagen a partir de texto"):
+    prompt_img = st.text_input("Describe la imagen que quieres generar:")
+    if st.button("Generar Imagen"):
+        with st.spinner("Creando imagen..."):
+            try:
+                image = generar_imagen_flux(prompt_img, st.secrets["HUGGINGFACE_API_TOKEN"])
+                st.image(image, caption="Imagen generada con IA", use_column_width=True)
+            except Exception as e:
+                st.error(f"No se pudo generar la imagen: {e}")
 # Contenedor para el historial de chat con altura fija
 chat_container = st.container(height=450, border=False)
 
