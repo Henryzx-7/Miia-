@@ -219,10 +219,10 @@ if user_input:
             "image_bytes": img_bytes
         })
         
-    except Exception as e:
-        st.session_state.chats[chat_id]["messages"].append({
-            "role": "assistant",
-            "content": f"❌ Error al generar imagen: {e}"
+        except Exception as e:
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": f"❌ Error al generar imagen: {e}"
         })
 
     st.rerun()
