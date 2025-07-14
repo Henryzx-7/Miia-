@@ -3,3 +3,4 @@ huggingface-hub
 duckduckgo-search
 langdetect
 Babel
+pytz
