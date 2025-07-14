@@ -205,9 +205,13 @@ if user_input:
     if st.session_state.modo_generacion == "texto":
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
     else:
-    # Generación de imagen como respuesta en el chat
+
+
+        
+    # Generaciónde imagen como respuesta en el chat
     try:
         img = generar_imagen_flux(user_input, st.secrets["HUGGINGFACE_API_TOKEN"])
+        
         buffer = BytesIO()
         img.save(buffer, format="PNG")
         img_bytes = buffer.getvalue()
@@ -218,6 +222,7 @@ if user_input:
             "content": user_input,
             "image_bytes": img_bytes
         })
+        
     except Exception as e:
         st.session_state.chats[chat_id]["messages"].append({
             "role": "assistant",
