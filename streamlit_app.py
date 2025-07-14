@@ -62,11 +62,40 @@ st.markdown("""
 # --- LÓGICA DE LA IA Y FUNCIONES AUXILIARES ---
 @st.cache_resource
 def get_client():
-    # --- Pega estas dos nuevas funciones aquí ---
+    try:
+        return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
+    except Exception as e:
+        st.error(f"Error al inicializar la API: {e}")
+        return None
 
 def get_image_description(client, image_bytes: bytes) -> str:
     """Llama al modelo de Imagen a Texto (OCRFlux)."""
     try:
+        # Este modelo espera la imagen directamente como data
+        response = client.post(
+            data=image_bytes, 
+            model="ChatDOC/OCRFlux-3B"
+        )
+        return response.decode('utf-8')
+    except Exception as e:
+        return f"Error al analizar la imagen: {e}"
+
+def generate_image(client, text_prompt: str):
+    """Llama al modelo de Texto a Imagen (FLUX.1)."""
+    try:
+        # Este modelo espera un payload JSON con el prompt
+        image_bytes = client.post(
+            json={"inputs": text_prompt}, 
+            model="black-forest-labs/FLUX.1-dev"
+        )
+        # Importamos las librerías necesarias aquí para mantener el código limpio
+        from PIL import Image
+        import io
+        image = Image.open(io.BytesIO(image_bytes))
+        return image
+    except Exception as e:
+        # Devolvemos el texto del error para mostrarlo en el chat
+        return f"Error al generar la imagen: {e}"
         # Este modelo espera la imagen directamente como data
         response = client.post(
             data=image_bytes, 
