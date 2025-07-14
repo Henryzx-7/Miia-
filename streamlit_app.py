@@ -246,10 +246,12 @@ if prompt:
         st.rerun()  # Provocará que la IA responda más abajo
     else:
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+        
         with chat_container:
         imagen_placeholder = st.empty()
         with imagen_placeholder.container():
             st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos porque muchos usuarios la están usando.</div></div>", unsafe_allow_html=True)
+            
         try:
             imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
             buffer = io.BytesIO()
