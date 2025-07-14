@@ -149,19 +149,51 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             thinking_placeholder.empty()
             st.rerun()
 
-# Input del usuario al final de la página
-prompt = st.chat_input("Pregúntale algo a T 1.0...")
+# --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL ---
+
+# Input del usuario
+prompt = st.chat_input("Escribe un mensaje o usa /crear para dibujar...")
 
 if prompt:
-    # Si no hay un chat activo, crea uno nuevo
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
-    
-    # Añade el mensaje del usuario y refresca INMEDIATAMENTE
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+    # Añadimos el prompt del usuario al historial para que se muestre al instante
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    # --- NUEVA LÓGICA DE COMANDOS ---
+    prompt_lower = prompt.lower().strip()
+
+    # 1. Si el usuario pide generar una imagen
+    if prompt_lower.startswith("/crear ") or prompt_lower.startswith("/dibuja "):
+        # Extraemos la descripción de la imagen después del comando
+        image_prompt = prompt.split(" ", 1)[1]
+
+        with st.chat_message("assistant"):
+            with st.spinner(f"🎨 Creando una imagen de: '{image_prompt}'..."):
+                hf_token = st.secrets.get("HUGGINGFACE_API_TOKEN")
+                if hf_token:
+                    # Llamamos a nuestro nuevo ayudante
+                    generated_image = generate_image(image_prompt, hf_token)
+                    if generated_image:
+                        st.image(generated_image, caption=f"Una creación de T 1.0: '{image_prompt}'")
+                        # Guardamos una referencia en el historial (opcional)
+                        st.session_state.messages.append({"role": "assistant", "content": f"He creado una imagen basada en tu descripción: '{image_prompt}'."})
+                    else:
+                        # Si hubo un error, ya se mostró con st.error en la función
+                        st.session_state.messages.append({"role": "assistant", "content": "Lo siento, no pude crear la imagen en este momento."})
+                else:
+                    st.error("No se encontró la clave de API de Hugging Face.")
+
+    # 2. Si es una conversación de texto normal
+    else:
+        with st.chat_message("assistant"):
+            with st.spinner("T 1.0 está pensando..."):
+                if client_ia:
+                    # El historial que pasamos a la IA de texto
+                    historial_para_api = [msg for msg in st.session_state.messages if "image" not in msg]
+                    response_text = get_hex_response(client_ia, prompt, historial_para_api)
+                    st.markdown(response_text)
+                    st.session_state.messages.append({"role": "assistant", "content": response_text})
+                else:
+                    st.error("El cliente de la API de texto no está disponible.")
+
+    # Refrescamos la página para que todo se muestre correctamente
     st.rerun()
