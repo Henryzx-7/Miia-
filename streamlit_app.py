@@ -205,12 +205,12 @@ if user_input:
     if st.session_state.modo_generacion == "texto":
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
     else:
-    try:
-        img = generar_imagen_flux(user_input, st.secrets["HUGGINGFACE_API_TOKEN"])
+        try:
+            img = generar_imagen_flux(user_input, st.secrets["HUGGINGFACE_API_TOKEN"])
         
-        buffer = BytesIO()
-        img.save(buffer, format="PNG")
-        img_bytes = buffer.getvalue()
+            buffer = BytesIO()
+            img.save(buffer, format="PNG")
+            img_bytes = buffer.getvalue()
 
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
         st.session_state.chats[chat_id]["messages"].append({
