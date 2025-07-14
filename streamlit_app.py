@@ -79,11 +79,9 @@ def get_hex_response(client, user_message, chat_history):
     messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
     
     try:
-        full_response = ""
-        for chunk in client.chat_completion(messages=messages, max_tokens=2048, stream=True):
-            if chunk.choices[0].delta.content:
-                full_response += chunk.choices[0].delta.content
-        return full_response
+        # Usamos stream=False para máxima estabilidad
+        response = client.chat_completion(messages=messages, max_tokens=2048, stream=False)
+        return response.choices[0].message.content
     except Exception as e:
         return f"Ha ocurrido un error con la API: {e}"
 
@@ -116,22 +114,41 @@ with st.sidebar:
 # --- INTERFAZ PRINCIPAL DEL CHAT ---
 st.markdown("<div class='animated-title'>HEX</div><p class='subtitle'>T 1.0</p>", unsafe_allow_html=True)
 
-# Contenedor para el historial de chat
-chat_history_container = st.container(height=500, border=False)
+# Contenedor para el historial de chat con altura fija
+chat_container = st.container(height=450, border=False)
 
-active_messages = []
-if st.session_state.active_chat_id and st.session_state.active_chat_id in st.session_state.chats:
+# Renderiza el historial de chat
+if st.session_state.active_chat_id:
     active_messages = st.session_state.chats[st.session_state.active_chat_id].get("messages", [])
+    with chat_container:
+        for message in active_messages:
+            container_class = "user-container" if message["role"] == "user" else "bot-container"
+            bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
+            st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
 
-# Renderiza el historial de chat con el diseño de burbujas CSS
-with chat_history_container:
-    for message in active_messages:
-        container_class = "user-container" if message["role"] == "user" else "bot-container"
-        bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
-        # Usamos un div contenedor para la alineación
-        st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
+# Lógica de respuesta (se ejecuta después de renderizar el historial)
+if st.session_state.active_chat_id and st.session_state.chats[st.session_state.active_chat_id]["messages"]:
+    last_message = st.session_state.chats[st.session_state.active_chat_id]["messages"][-1]
+    # Si el último mensaje es del usuario, la IA necesita responder
+    if last_message["role"] == "user":
+        with chat_container:
+            # Muestra la animación de "Pensando..."
+            thinking_placeholder = st.empty()
+            with thinking_placeholder.container():
+                st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
+            
+            # Llama a la IA
+            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+            response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
+            
+            # Añade la respuesta al historial
+            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
+            
+            # Limpia el "Pensando..." y refresca
+            thinking_placeholder.empty()
+            st.rerun()
 
-# Input del usuario
+# Input del usuario al final de la página
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
 if prompt:
@@ -144,16 +161,6 @@ if prompt:
             "messages": []
         }
     
-    # Añade el mensaje del usuario al historial
+    # Añade el mensaje del usuario y refresca INMEDIATAMENTE
     st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
-    
-    # Lógica de respuesta de la IA
-    if client_ia:
-        with st.spinner("T 1.0 está pensando..."): # El spinner por defecto es limpio y funciona bien
-            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-            response_text = get_hex_response(client_ia, prompt, historial_para_api)
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
-    else:
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": "El cliente de la API no está disponible."})
-    
     st.rerun()
