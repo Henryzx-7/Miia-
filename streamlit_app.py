@@ -118,7 +118,13 @@ def generate_chat_name(first_prompt):
     return name[:30] + "..." if len(name) > 30 else name
 
 # --- INICIALIZACIÓN Y GESTIÓN DE ESTADO ---
-client_ia = get_client()
+# --- Reemplaza esta línea ---
+# client_ia = get_client()
+# --- Con este bloque ---
+if "client_ia" not in st.session_state:
+    st.session_state["client_ia"] = get_client()
+client_ia = st.session_state["client_ia"]
+# --- Fin del bloque de reemplazo ---
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 if "active_chat_id" not in st.session_state:
@@ -180,6 +186,12 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
 
 # Input del usuario con opciones claras
 prompt = st.chat_input("Escribe un mensaje o usa /crear o /analizar...")
+# --- Añade este bloque para el selector de archivos ---
+uploaded_file = st.file_uploader("Sube una imagen para analizar", type=["png", "jpg", "jpeg"])
+# --- Fin del bloque añadido ---
+
+if prompt or uploaded_file:
+    # ... el resto de tu lógica de input ...
 uploaded_file = st.file_uploader("...o sube una imagen para analizarla", type=["png", "jpg", "jpeg"])
 
 if prompt or uploaded_file:
