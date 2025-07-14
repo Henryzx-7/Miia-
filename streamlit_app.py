@@ -217,7 +217,7 @@ if st.session_state.mostrar_selector:
     with st.container():
         modo = st.radio(
             "Selecciona el modo:",
-            ["texto", "imagen"],
+            ["¡Habla con Tigre!", "Generar imagenes"],
             index=0 if st.session_state.modo_generacion == "texto" else 1,
             key="modo_radio",
             label_visibility="collapsed"
