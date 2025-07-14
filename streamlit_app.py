@@ -208,7 +208,7 @@ with st.container():
             key="chat_input"
         )
     with col2:
-        if st.button("➕", key="plus_button", help="Cambiar modo"):
+        if st.button("+", key="plus_button", help="Cambiar modo"):
             st.session_state.mostrar_selector = not st.session_state.mostrar_selector
 
 # Selector flotante de modo
