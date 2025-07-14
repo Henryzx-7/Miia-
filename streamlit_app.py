@@ -65,63 +65,6 @@ def get_client():
     try:
         return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
     except Exception as e:
-        st.error(f"Error al inicializar la API: {e}")
-        return None
-
-def get_image_description(client, image_bytes: bytes) -> str:
-    """Llama al modelo de Imagen a Texto (OCRFlux)."""
-    try:
-        # Este modelo espera la imagen directamente como data
-        response = client.post(
-            data=image_bytes, 
-            model="ChatDOC/OCRFlux-3B"
-        )
-        return response.decode('utf-8')
-    except Exception as e:
-        return f"Error al analizar la imagen: {e}"
-
-def generate_image(client, text_prompt: str):
-    """Llama al modelo de Texto a Imagen (FLUX.1)."""
-    try:
-        # Este modelo espera un payload JSON con el prompt
-        image_bytes = client.post(
-            json={"inputs": text_prompt}, 
-            model="black-forest-labs/FLUX.1-dev"
-        )
-        # Importamos las librerías necesarias aquí para mantener el código limpio
-        from PIL import Image
-        import io
-        image = Image.open(io.BytesIO(image_bytes))
-        return image
-    except Exception as e:
-        # Devolvemos el texto del error para mostrarlo en el chat
-        return f"Error al generar la imagen: {e}"
-        # Este modelo espera la imagen directamente como data
-        response = client.post(
-            data=image_bytes, 
-            model="ChatDOC/OCRFlux-3B"
-        )
-        # El formato de la respuesta puede variar, necesitamos decodificarlo
-        # Este es un ejemplo, podría necesitar ajuste según la respuesta real del modelo
-        return response.decode('utf-8')
-    except Exception as e:
-        return f"Error al analizar la imagen: {e}"
-
-def generate_image(client, text_prompt: str):
-    """Llama al modelo de Texto a Imagen (FLUX.1)."""
-    try:
-        # Este modelo espera un payload JSON con el prompt
-        image_bytes = client.post(
-            json={"inputs": text_prompt}, 
-            model="black-forest-labs/FLUX.1-dev"
-        )
-        return Image.open(io.BytesIO(image_bytes))
-    except Exception as e:
-        # Devolvemos el texto del error para mostrarlo en el chat
-        return f"Error al generar la imagen: {e}"
-    try:
-        return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
-    except Exception as e:
         st.error(f"No se pudo inicializar la API: {e}")
         return None
 
@@ -147,13 +90,7 @@ def generate_chat_name(first_prompt):
     return name[:30] + "..." if len(name) > 30 else name
 
 # --- INICIALIZACIÓN Y GESTIÓN DE ESTADO ---
-# --- Reemplaza esta línea ---
-# client_ia = get_client()
-# --- Con este bloque ---
-if "client_ia" not in st.session_state:
-    st.session_state["client_ia"] = get_client()
-client_ia = st.session_state["client_ia"]
-# --- Fin del bloque de reemplazo ---
+client_ia = get_client()
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 if "active_chat_id" not in st.session_state:
@@ -211,10 +148,10 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             thinking_placeholder.empty()
             st.rerun()
 
-# --- INICIA EL NUEVO BLOQUE DE LÓGICA DE INPUT ---
+# Input del usuario al final de la página
+prompt = st.chat_input("Pregúntale algo a T 1.0...")
 
-# Input del usuario
-if prompt := st.chat_input("Pregúntale algo a T 1.0..."):
+if prompt:
     # Si no hay un chat activo, crea uno nuevo
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
@@ -224,28 +161,6 @@ if prompt := st.chat_input("Pregúntale algo a T 1.0..."):
             "messages": []
         }
     
-    # Añade el mensaje del usuario y refresca la interfaz
+    # Añade el mensaje del usuario y refresca INMEDIATAMENTE
     st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
     st.rerun()
-
-# Si el último mensaje es del usuario, la IA debe responder
-if st.session_state.active_chat_id and st.session_state.chats[st.session_state.active_chat_id]["messages"]:
-    last_message = st.session_state.chats[st.session_state.active_chat_id]["messages"][-1]
-    
-    if last_message["role"] == "user":
-        # Muestra la animación de "Pensando..."
-        with chat_history_container:
-             with st.chat_message("assistant"):
-                thinking_placeholder = st.empty()
-                thinking_placeholder.markdown("<div class='thinking-animation'>Pensando…</div>", unsafe_allow_html=True)
-        
-        # Obtiene la respuesta de la IA
-        historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-        response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
-        
-        # Añade la respuesta de la IA al historial
-        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
-        
-        # Limpia el "Pensando..." y refresca la página para mostrar la respuesta
-        thinking_placeholder.empty()
-        st.rerun()
