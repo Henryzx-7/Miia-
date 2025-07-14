@@ -6,6 +6,28 @@ from datetime import datetime
 import pytz
 import requests, base64, io
 from PIL import Image
+import requests
+from PIL import Image
+from io import BytesIO
+
+def generar_imagen_flux(prompt, token):
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        payload = {"inputs": prompt}
+        response = requests.post(
+            "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev",
+            headers=headers,
+            json=payload
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Error en la API: {response.status_code} - {response.text}")
+        
+        image = Image.open(BytesIO(response.content))
+        return image
+    
+    except Exception as e:
+        raise Exception(f"No se pudo generar: {e}")
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
