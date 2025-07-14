@@ -244,26 +244,29 @@ if prompt:
     if st.session_state.modo_generacion == "texto":
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
         st.rerun()  # Provocará que la IA responda más abajo
-    else:
-        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
-        
-        with chat_container:
+else:
+    st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+
+    # 👉 Mostrar animación "Generando imagen..."
+    with chat_container:
         imagen_placeholder = st.empty()
         with imagen_placeholder.container():
             st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos porque muchos usuarios la están usando.</div></div>", unsafe_allow_html=True)
-            
-        try:
-            imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
-            buffer = io.BytesIO()
-            imagen.save(buffer, format="PNG")
-            st.session_state.chats[chat_id]["messages"].append({
-                "role": "assistant",
-                "content": prompt,
-                "image_bytes": buffer.getvalue()
-            })
-        except Exception as e:
-            st.session_state.chats[chat_id]["messages"].append({
-                "role": "assistant",
-                "content": f"❌ Error generando imagen: {e}"
-            })
-        st.rerun()
+
+    try:
+        imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
+        buffer = io.BytesIO()
+        imagen.save(buffer, format="PNG")
+        st.session_state.chats[chat_id]["messages"].append({
+            "role": "assistant",
+            "content": prompt,
+            "image_bytes": buffer.getvalue()
+        })
+    except Exception as e:
+        st.session_state.chats[chat_id]["messages"].append({
+            "role": "assistant",
+            "content": f"❌ Error generando imagen: {e}"
+        })
+
+    imagen_placeholder.empty()  # 👈 Elimina el letrero de cargando
+    st.rerun()
