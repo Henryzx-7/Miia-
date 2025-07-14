@@ -175,24 +175,25 @@ if active:
 
             st.markdown(f"<div class='message-container {container_class}'>", unsafe_allow_html=True)
 
-            if m["role"] == "assistant" and "image" in m:
-                st.image(m["image"], caption=m["content"], use_container_width=True)
-            else:
-                st.markdown(f"<div class='chat-bubble {bubble_class}'>{m['content']}</div>", unsafe_allow_html=True)
+            if m["role"] == "assistant" and "image_bytes" in m:
+    st.image(BytesIO(m["image_bytes"]), caption=m["content"], use_container_width=True)
+else:
+    st.markdown(f"<div class='chat-bubble {bubble_class}'>{m['content']}</div>", unsafe_allow_html=True)
 
             st.markdown("</div>", unsafe_allow_html=True)
 
 # Botón + en la barra de chat
-col_input, col_toggle = st.columns([10, 1])
-with col_toggle:
-    if st.button("➕", key="toggle_modo"):
-        st.session_state.modo_generacion = "imagen" if st.session_state.modo_generacion == "texto" else "texto"
+with st.container():
+    col_input, col_toggle = st.columns([10, 1])
 
-# Entrada del usuario (texto o prompt de imagen)
-if st.session_state.modo_generacion == "texto":
-    user_input = st.chat_input("Escribí algo...")
-else:
-    user_input = st.chat_input("Describe la imagen que querés generar...")
+    if st.session_state.modo_generacion == "texto":
+        user_input = col_input.chat_input("Escribí algo...")
+    else:
+        user_input = col_input.chat_input("Describe la imagen que querés generar...")
+
+    with col_toggle:
+        if st.button("➕", use_container_width=True):
+            st.session_state.modo_generacion = "imagen" if st.session_state.modo_generacion == "texto" else "texto"
 
 if user_input:
     if not st.session_state.active_chat_id:
@@ -208,8 +209,15 @@ if user_input:
         # Generación de imagen como respuesta en el chat
         try:
             img = generar_imagen_flux(user_input, st.secrets["HUGGINGFACE_API_TOKEN"])
-            st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
-            st.session_state.chats[chat_id]["messages"].append({"role": "assistant", "content": img})
+buffer = BytesIO()
+img.save(buffer, format="PNG")
+img_bytes = buffer.getvalue()
+
+st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": user_input})
+st.session_state.chats[chat_id]["messages"].append({
+    "role": "assistant",
+    "content": user_input,
+})
         except Exception as e:
             st.session_state.chats[chat_id]["messages"].append({"role": "assistant", "content": f"❌ Error al generar imagen: {e}"})
 
