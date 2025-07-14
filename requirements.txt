@@ -1,2 +1,5 @@
 streamlit
 huggingface-hub
+duckduckgo-search
+langdetect
+Babel
