@@ -106,6 +106,7 @@ def get_hex_response(client, user_message, chat_history):
         if "Too Many Requests" in str(e) or "429" in str(e):
             return "⚠️ Límite de solicitudes alcanzado. Por favor, espera un minuto."
         return f"Ha ocurrido un error con la API: {e}"
+        
 def generate_chat_name(first_prompt):
     name = str(first_prompt).split('\n')[0]
     return name[:30] + "..." if len(name) > 30 else name
