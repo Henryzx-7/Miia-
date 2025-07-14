@@ -34,10 +34,55 @@ st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
 # --- ESTILOS CSS & JS (copiar igual que antes) ---
 st.markdown("""
-<style> ... </style>
-<script> ... </script>
-""", unsafe_allow_html=True)
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Space+Grotesk:wght@700&display=swap');
 
+    /* Encabezado animado */
+    .animated-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 4em; font-weight: 700; text-align: center; color: #888;
+        background: linear-gradient(90deg, #555, #fff, #555);
+        background-size: 200% auto;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        animation: shine 5s linear infinite;
+    }
+    .subtitle { text-align: center; margin-top: -25px; font-size: 1.5em; color: #aaa; }
+    @keyframes shine { to { background-position: -200% center; } }
+
+    /* Contenedores y Burbujas de Chat */
+    .message-container {
+        display: flex;
+        width: 100%;
+        margin-bottom: 10px;
+        animation: fadeIn 0.5s ease-in-out;
+    }
+    .user-container { justify-content: flex-end; }
+    .bot-container { justify-content: flex-start; }
+    .chat-bubble {
+        padding: 12px 18px;
+        border-radius: 20px;
+        max-width: 75%;
+        word-wrap: break-word;
+    }
+    .user-bubble { background-color: #f0f0f0; color: #333; }
+    .bot-bubble { background-color: #2b2d31; color: #fff; }
+
+    /* Animación de "Pensando..." */
+    .thinking-animation {
+        font-style: italic;
+        color: #888;
+        background: linear-gradient(90deg, #666, #fff, #666);
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: shine 2s linear infinite;
+        padding: 12px 18px;
+        border-radius: 20px;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+""", unsafe_allow_html=True)
 # --- FUNCIONES AUXILIARES ---
 
 @st.cache_resource
