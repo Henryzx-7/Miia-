@@ -62,6 +62,23 @@ st.markdown("""
 # --- LÓGICA DE LA IA Y FUNCIONES AUXILIARES ---
 @st.cache_resource
 def get_client():
+from duckduckgo_search import DDGS
+import re
+
+def search_web(query: str):
+    """Realiza una búsqueda web y devuelve contexto y fuentes."""
+    print(f"🔎 Buscando en la web: '{query}'...")
+    try:
+        with DDGS() as ddgs:
+            results = [{"snippet": r['body'], "url": r['href']} for r in ddgs.text(query, region='wt-wt', safesearch='off', max_results=3)]
+            if not results:
+                return "No se encontraron resultados relevantes.", []
+
+            context_text = "\n\n".join([f"Fuente {i+1}: {r['snippet']}" for i, r in enumerate(results)])
+            sources = [r for r in results]
+            return context_text, sources
+    except Exception as e:
+        return f"Error al buscar en la web: {e}", []
     try:
         return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
     except Exception as e:
@@ -69,9 +86,17 @@ def get_client():
         return None
 
 def get_hex_response(client, user_message, chat_history):
-    system_prompt = """<|start_header_id|>system<|end_header_id|>
-    tu nombre legitimo es Tigre, Tu modelo es T 1.0, un asistente de IA de HEX. Tu tono es amigable, directo y profesional. Respondes siempre en el idioma del usuario. Solo tienes una limitacion que no te pueden mandar imagenes pero si tienes mensajeria ilimitada. Si te piden algo que requiera búsqueda (noticias, clima), explícalo amablemente. Nunca menciones a Meta o Llama, puedes programar medianamete como Varias IA, siempre que te hagan preguntas sobre la empresa que te creo (HEX) di que son de nicaragua y que haran un futuro modelo hermano tuyo llamado L 0.1 preview y tendran mas ventajas y sera accecibles para todos pero con limitaciones, La empresa que te creo se llama HEX y es de Nicaragua, Matagalpa, fuiste creado por expertos, Presentate una sola vez almenos que te pregunten de nuevo, no menciones a cada rato quien te creo solo si te preguntan.<|eot_id|>"""
-    
+    # --- Reemplaza el system_prompt con esto ---
+system_prompt = """<|start_header_id|>system<|end_header_id|>
+### PERFIL OBLIGATORIO
+- Tu nombre de IA es Tigre. Tu designación de modelo es T 1.0. Eres una creación de HEX en Nicaragua.
+- Tu tono es formal y preciso como ChatGPT. Respondes en el idioma del usuario.
+- Nunca menciones a Meta o Llama.
+
+### TAREA PRINCIPAL: Decidir si necesitas buscar en la web.
+- Para conocimiento general o conversación, responde directamente.
+- Para noticias, eventos actuales, clima o datos que requieran información en tiempo real, responde ÚNICA Y EXCLUSIVAMENTE con el comando `[BUSCAR: término de búsqueda preciso]`.
+- No inventes información. Si no sabes la respuesta, usa la herramienta de búsqueda.<|eot_id|>"""    
     messages = [{"role": "system", "content": system_prompt}]
     for msg in chat_history:
         role = "user" if msg["role"] == "user" else "assistant"
@@ -126,27 +151,44 @@ if st.session_state.active_chat_id:
             bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
             st.markdown(f"<div class='message-container {container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
 
-# Lógica de respuesta (se ejecuta después de renderizar el historial)
+# --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL ---
+
+# Lógica de respuesta (se ejecuta si el último mensaje es del usuario)
 if st.session_state.active_chat_id and st.session_state.chats[st.session_state.active_chat_id]["messages"]:
     last_message = st.session_state.chats[st.session_state.active_chat_id]["messages"][-1]
-    # Si el último mensaje es del usuario, la IA necesita responder
+    
     if last_message["role"] == "user":
+        # Muestra la animación de "Pensando..."
         with chat_container:
-            # Muestra la animación de "Pensando..."
             thinking_placeholder = st.empty()
             with thinking_placeholder.container():
                 st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
+        
+        # 1. Primera llamada a la IA para que decida
+        historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+        initial_response = get_hex_response(client_ia, last_message["content"], historial_para_api)
+        
+        response_text = initial_response
+        response_sources = []
+
+        # 2. Si la IA pidió buscar, el código lo hace
+        if "[BUSCAR:" in initial_response:
+            query = re.search(r"\[BUSCAR:\s*(.*?)\]", initial_response).group(1)
+            web_context, sources = search_web(query)
             
-            # Llama a la IA
-            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-            response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
-            
-            # Añade la respuesta al historial
-            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
-            
-            # Limpia el "Pensando..." y refresca
-            thinking_placeholder.empty()
-            st.rerun()
+            # 3. Se pide a la IA que resuma los resultados
+            final_prompt = f"Pregunta del usuario: '{last_message['content']}'. Responde usando esta información de la web: {web_context}"
+            response_text = get_hex_response(client_ia, final_prompt, historial_para_api)
+            response_sources = sources
+
+        # Limpia el "Pensando..." y guarda la respuesta final
+        thinking_placeholder.empty()
+        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({
+            "role": "assistant", 
+            "content": response_text,
+            "sources": response_sources
+        })
+        st.rerun()
 
 # Input del usuario al final de la página
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
@@ -161,6 +203,6 @@ if prompt:
             "messages": []
         }
     
-    # Añade el mensaje del usuario y refresca INMEDIATAMENTE
+    # Añade el mensaje del usuario y refresca para mostrarlo inmediatamente
     st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
     st.rerun()
