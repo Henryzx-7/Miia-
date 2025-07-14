@@ -1,0 +1,8 @@
+/* style.css */
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Space+Grotesk:wght@700&display=swap');
+
+.animated-title {
+    font-family: 'Space Grotesk', sans-serif;
+    /* ... el resto de tus estilos ... */
+}
+/* ... etc ... */
