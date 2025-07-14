@@ -75,7 +75,6 @@ st.markdown("""
 def get_client():
     try:
         return InferenceClient(model="mistralai/Mistral-7B-Instruct-v0.2", token=st.secrets["HUGGINGFACE_API_TOKEN"])
-    except Exception as e:
         st.error(f"No se pudo inicializar la API: {e}")
         return None
 
