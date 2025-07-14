@@ -211,72 +211,41 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             thinking_placeholder.empty()
             st.rerun()
 
-# --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL ---
+# --- INICIA EL NUEVO BLOQUE DE LÓGICA DE INPUT ---
 
-# Input del usuario con opciones claras
-prompt = st.chat_input("Escribe un mensaje o usa /crear o /analizar...")
-# --- Añade este bloque para el selector de archivos ---
-uploaded_file = st.file_uploader("Sube una imagen para analizar", type=["png", "jpg", "jpeg"])
-# --- Fin del bloque añadido ---
-
-if prompt or uploaded_file:
-    # ... el resto de tu lógica de input ...
-uploaded_file = st.file_uploader("...o sube una imagen para analizarla", type=["png", "jpg", "jpeg"])
-
-if prompt or uploaded_file:
+# Input del usuario
+if prompt := st.chat_input("Pregúntale algo a T 1.0..."):
     # Si no hay un chat activo, crea uno nuevo
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
         st.session_state.active_chat_id = new_chat_id
         st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt or "Análisis de Imagen"),
+            "name": generate_chat_name(prompt),
             "messages": []
         }
     
-    active_chat_messages = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-
-    # Lógica para manejar la entrada
-    if uploaded_file and not prompt:
-        prompt = "Analiza la imagen que he subido."
-
-    active_chat_messages.append({"role": "user", "content": prompt})
-
-    # --- LÓGICA DE DECISIÓN ---
-    prompt_lower = prompt.lower().strip()
-    
-    # 1. Comando para GENERAR IMAGEN
-    if prompt_lower.startswith("/crear ") or prompt_lower.startswith("/dibuja "):
-        image_prompt = prompt.split(" ", 1)[1]
-        with st.spinner(f"🎨 Creando una imagen de '{image_prompt}'..."):
-            if client_ia:
-                generated_image = generate_image(client_ia, image_prompt)
-                if isinstance(generated_image, Image.Image):
-                    st.image(generated_image, caption=image_prompt)
-                    active_chat_messages.append({"role": "assistant", "content": f"He generado una imagen de '{image_prompt}'."})
-                else: # Si hubo un error
-                    active_chat_messages.append({"role": "assistant", "content": str(generated_image)})
-            else:
-                active_chat_messages.append({"role": "assistant", "content": "El cliente de la API no está disponible."})
-
-    # 2. Si se subió una imagen para ANALIZAR
-    elif uploaded_file:
-        with st.spinner("👀 Analizando la imagen..."):
-            image_bytes = uploaded_file.getvalue()
-            if client_ia:
-                description = get_image_description(client_ia, image_bytes)
-                response_text = f"**Descripción de la imagen:**\n{description}"
-                active_chat_messages.append({"role": "assistant", "content": response_text})
-            else:
-                active_chat_messages.append({"role": "assistant", "content": "El cliente de la API no está disponible."})
-
-    # 3. Para todo lo demás, CHAT DE TEXTO
-    else:
-        with st.spinner("T 1.0 está pensando..."):
-            if client_ia:
-                historial_para_api = active_chat_messages
-                response_text = get_hex_response(client_ia, prompt, historial_para_api)
-                active_chat_messages.append({"role": "assistant", "content": response_text})
-            else:
-                active_chat_messages.append({"role": "assistant", "content": "El cliente de la API no está disponible."})
-
+    # Añade el mensaje del usuario y refresca la interfaz
+    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
     st.rerun()
+
+# Si el último mensaje es del usuario, la IA debe responder
+if st.session_state.active_chat_id and st.session_state.chats[st.session_state.active_chat_id]["messages"]:
+    last_message = st.session_state.chats[st.session_state.active_chat_id]["messages"][-1]
+    
+    if last_message["role"] == "user":
+        # Muestra la animación de "Pensando..."
+        with chat_history_container:
+             with st.chat_message("assistant"):
+                thinking_placeholder = st.empty()
+                thinking_placeholder.markdown("<div class='thinking-animation'>Pensando…</div>", unsafe_allow_html=True)
+        
+        # Obtiene la respuesta de la IA
+        historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+        response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
+        
+        # Añade la respuesta de la IA al historial
+        st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
+        
+        # Limpia el "Pensando..." y refresca la página para mostrar la respuesta
+        thinking_placeholder.empty()
+        st.rerun()
