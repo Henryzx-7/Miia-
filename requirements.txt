@@ -4,3 +4,4 @@ duckduckgo-search
 langdetect
 Babel
 pytz
+Pillow
