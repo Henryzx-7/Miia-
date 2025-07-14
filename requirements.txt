@@ -5,3 +5,4 @@ langdetect
 Babel
 pytz
 Pillow
+pip install pillow requests
