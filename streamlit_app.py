@@ -38,52 +38,34 @@ st.markdown("""
     /* Animación de "Pensando..." */
     .thinking-animation { font-style: italic; color: #888; }
 
-    /* Bloques de código */
-    .code-block-container { position: relative; background-color: #1e1e1e; border-radius: 8px; margin: 1rem 0; }
-    .code-block-header { display: flex; justify-content: space-between; align-items: center; background-color: #333; padding: 8px 12px; border-top-left-radius: 8px; border-top-right-radius: 8px;}
-    .copy-button { background-color: #555; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
-    
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
-<script>
-    async function copyToClipboard(elementId) {
-        const preElement = document.getElementById(elementId);
-        if (preElement) {
-            try {
-                await navigator.clipboard.writeText(preElement.innerText);
-                alert('¡Código copiado!');
-            } catch (err) {
-                alert('Error al copiar.');
-            }
-        }
-    }
-</script>
 """, unsafe_allow_html=True)
 
-# --- LÓGICA DE LA IA ---
+
+# --- LÓGICA DE LA IA Y FUNCIONES AUXILIARES ---
 @st.cache_resource
 def get_client():
     try:
         return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
     except Exception as e:
-        st.error(f"Error al inicializar la API: {e}")
+        st.error(f"No se pudo inicializar la API: {e}")
         return None
 
 def get_current_datetime():
     now_utc = datetime.now(pytz.utc)
-    return f"La fecha universal (UTC) de hoy es **{now_utc.strftime('%A, %d de %B de %Y')}**."
+    return f"Claro, la fecha universal (UTC) de hoy es **{now_utc.strftime('%A, %d de %B de %Y')}**."
 
 def get_hex_response(client, user_message, chat_history):
     system_prompt = """<|start_header_id|>system<|end_header_id|>
-    Eres Tigre (T 1.0), un asistente de IA de HEX. Tu tono es formal, directo y preciso. Respondes siempre en español. No tienes acceso a internet. Si te piden buscar, explica amablemente que es una función futura.<|eot_id|>"""
+    Eres Tigre (T 1.0), un asistente de IA de HEX. Tu tono es formal y preciso. Respondes siempre en español. No tienes acceso a internet.<|eot_id|>"""
     
     # --- CORRECCIÓN EN EL FORMATEO DEL HISTORIAL ---
     messages = [{"role": "system", "content": system_prompt}]
     for msg in chat_history:
-        # Aseguramos que el contenido sea siempre un string
+        role = "user" if msg["role"] == "user" else "assistant"
+        # Aseguramos que el contenido sea un string antes de formatear
         content = str(msg.get("content", ""))
-        role = "user" if msg.get("role") == "user" else "assistant"
-        # Aplicamos el formato especial de Llama 3
         messages.append({"role": role, "content": f"<|start_header_id|>{role}<|end_header_id|>\n\n{content}<|eot_id|>"})
     
     messages.append({"role": "user", "content": f"<|start_header_id|>user<|end_header_id|>\n\n{user_message}<|eot_id|>"})
@@ -132,9 +114,10 @@ if st.session_state.active_chat_id:
     active_messages = st.session_state.chats[st.session_state.active_chat_id].get("messages", [])
 
 for message in active_messages:
-    container_class = "user-container" if message["role"] == "user" else "bot-container"
-    bubble_class = "user-bubble" if message["role"] == "user" else "bot-bubble"
-    st.markdown(f"<div class='{container_class}'><div class='chat-bubble {bubble_class}'>{message['content']}</div></div>", unsafe_allow_html=True)
+    # --- CORRECCIÓN EN LA LÓGICA DE RENDERIZADO ---
+    # Usamos st.chat_message que maneja la alineación y avatares nativamente
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
 # Input del usuario
 prompt = st.chat_input("Pregúntale algo a T 1.0...")
@@ -145,7 +128,8 @@ if prompt:
         st.session_state.active_chat_id = new_chat_id
         st.session_state.chats[new_chat_id] = {"name": generate_chat_name(prompt), "messages": []}
     
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+    current_chat_messages = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+    current_chat_messages.append({"role": "user", "content": prompt})
 
     prompt_lower = prompt.lower().strip()
     if any(s in prompt_lower for s in ["qué fecha es", "que fecha es", "dime la fecha"]):
@@ -153,10 +137,9 @@ if prompt:
     else:
         if client_ia:
             with st.spinner("T 1.0 está pensando..."):
-                historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-                response_text = get_hex_response(client_ia, prompt, historial_para_api)
+                response_text = get_hex_response(client_ia, prompt, current_chat_messages)
         else:
             response_text = "El cliente de la API no está disponible."
             
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
+    current_chat_messages.append({"role": "assistant", "content": response_text})
     st.rerun()
