@@ -62,6 +62,34 @@ st.markdown("""
 # --- LÓGICA DE LA IA Y FUNCIONES AUXILIARES ---
 @st.cache_resource
 def get_client():
+    # --- Pega estas dos nuevas funciones aquí ---
+
+def get_image_description(client, image_bytes: bytes) -> str:
+    """Llama al modelo de Imagen a Texto (OCRFlux)."""
+    try:
+        # Este modelo espera la imagen directamente como data
+        response = client.post(
+            data=image_bytes, 
+            model="ChatDOC/OCRFlux-3B"
+        )
+        # El formato de la respuesta puede variar, necesitamos decodificarlo
+        # Este es un ejemplo, podría necesitar ajuste según la respuesta real del modelo
+        return response.decode('utf-8')
+    except Exception as e:
+        return f"Error al analizar la imagen: {e}"
+
+def generate_image(client, text_prompt: str):
+    """Llama al modelo de Texto a Imagen (FLUX.1)."""
+    try:
+        # Este modelo espera un payload JSON con el prompt
+        image_bytes = client.post(
+            json={"inputs": text_prompt}, 
+            model="black-forest-labs/FLUX.1-dev"
+        )
+        return Image.open(io.BytesIO(image_bytes))
+    except Exception as e:
+        # Devolvemos el texto del error para mostrarlo en el chat
+        return f"Error al generar la imagen: {e}"
     try:
         return InferenceClient(model="meta-llama/Meta-Llama-3-8B-Instruct", token=st.secrets["HUGGINGFACE_API_TOKEN"])
     except Exception as e:
@@ -148,19 +176,66 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             thinking_placeholder.empty()
             st.rerun()
 
-# Input del usuario al final de la página
-prompt = st.chat_input("Pregúntale algo a T 1.0...")
+# --- REEMPLAZA DESDE AQUÍ HASTA EL FINAL ---
 
-if prompt:
+# Input del usuario con opciones claras
+prompt = st.chat_input("Escribe un mensaje o usa /crear o /analizar...")
+uploaded_file = st.file_uploader("...o sube una imagen para analizarla", type=["png", "jpg", "jpeg"])
+
+if prompt or uploaded_file:
     # Si no hay un chat activo, crea uno nuevo
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
         st.session_state.active_chat_id = new_chat_id
         st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
+            "name": generate_chat_name(prompt or "Análisis de Imagen"),
             "messages": []
         }
     
-    # Añade el mensaje del usuario y refresca INMEDIATAMENTE
-    st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "user", "content": prompt})
+    active_chat_messages = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+
+    # Lógica para manejar la entrada
+    if uploaded_file and not prompt:
+        prompt = "Analiza la imagen que he subido."
+
+    active_chat_messages.append({"role": "user", "content": prompt})
+
+    # --- LÓGICA DE DECISIÓN ---
+    prompt_lower = prompt.lower().strip()
+    
+    # 1. Comando para GENERAR IMAGEN
+    if prompt_lower.startswith("/crear ") or prompt_lower.startswith("/dibuja "):
+        image_prompt = prompt.split(" ", 1)[1]
+        with st.spinner(f"🎨 Creando una imagen de '{image_prompt}'..."):
+            if client_ia:
+                generated_image = generate_image(client_ia, image_prompt)
+                if isinstance(generated_image, Image.Image):
+                    st.image(generated_image, caption=image_prompt)
+                    active_chat_messages.append({"role": "assistant", "content": f"He generado una imagen de '{image_prompt}'."})
+                else: # Si hubo un error
+                    active_chat_messages.append({"role": "assistant", "content": str(generated_image)})
+            else:
+                active_chat_messages.append({"role": "assistant", "content": "El cliente de la API no está disponible."})
+
+    # 2. Si se subió una imagen para ANALIZAR
+    elif uploaded_file:
+        with st.spinner("👀 Analizando la imagen..."):
+            image_bytes = uploaded_file.getvalue()
+            if client_ia:
+                description = get_image_description(client_ia, image_bytes)
+                response_text = f"**Descripción de la imagen:**\n{description}"
+                active_chat_messages.append({"role": "assistant", "content": response_text})
+            else:
+                active_chat_messages.append({"role": "assistant", "content": "El cliente de la API no está disponible."})
+
+    # 3. Para todo lo demás, CHAT DE TEXTO
+    else:
+        with st.spinner("T 1.0 está pensando..."):
+            if client_ia:
+                historial_para_api = active_chat_messages
+                response_text = get_hex_response(client_ia, prompt, historial_para_api)
+                active_chat_messages.append({"role": "assistant", "content": response_text})
+            else:
+                active_chat_messages.append({"role": "assistant", "content": "El cliente de la API no está disponible."})
+
     st.rerun()
