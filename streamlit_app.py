@@ -259,34 +259,33 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
         "image_bytes": buffer.getvalue()
     })
 
-    # Mostrar input adicional para texto opcional
-    texto_adicional = st.text_input("Agrega un comentario (opcional):", key="comentario_ocr")
+# Mostrar input adicional para texto opcional
+texto_adicional = st.text_input("Agrega un comentario (opcional):", key="comentario_ocr")
 
-        with st.spinner("Analizando imagen..."):
-        try:
-            headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-            imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-            payload = {
-                "inputs": {
-                    "image": imagen_base64,
-                    "question": texto_adicional or "Describe el contenido de esta imagen"
-                }
+with st.spinner("Analizando imagen..."):
+    try:
+        headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
+        imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        payload = {
+            "inputs": {
+                "image": imagen_base64,
+                "question": texto_adicional or "Describe el contenido de esta imagen"
             }
-            response = requests.post(
-                "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
-                headers=headers,
-                json=payload
-            )
+        }
+        response = requests.post(
+            "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
+            headers=headers,
+            json=payload
+        )
 
-            # 🔍 Verificamos si la respuesta fue exitosa
-            if response.status_code == 200:
-                resultado = response.json()
-                respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
-            else:
-                respuesta_ocr = f"❌ Error en la API: {response.status_code} - {response.text}"
+        if response.status_code == 200:
+            resultado = response.json()
+            respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
+        else:
+            respuesta_ocr = f"❌ Error en la API: {response.status_code} - {response.text}"
 
-        except Exception as e:
-            respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
+    except Exception as e:
+        respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
 
     # Guardar respuesta como si la IA respondiera
     st.session_state.chats[chat_id]["messages"].append({
