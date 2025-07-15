@@ -258,7 +258,7 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
     buffer = io.BytesIO(imagen_subida.read())
     st.session_state.chats[chat_id]["messages"].append({
         "role": "user",
-        "content": "📷 Imagen enviada para análisis OCR",
+        "content": prompt or "📷 Imagen sin texto",
         "image_bytes": buffer.getvalue()
     })
 
@@ -282,11 +282,11 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
                 headers=headers,
                 json=data
             )
-            resultado = response.json()
-            respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
-        except Exception as e:
-            respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
-
+if response.content:
+    resultado = response.json()
+    respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
+else:
+    respuesta_ocr = "❌ La API no devolvió ningún contenido."
     # Añade la respuesta de la IA
     st.session_state.chats[chat_id]["messages"].append({
         "role": "assistant",
