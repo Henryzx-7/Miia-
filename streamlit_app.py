@@ -188,6 +188,15 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
             
             # Añade la respuesta al historial
+if st.session_state.active_chat_id is None:
+    new_chat_id = str(time.time())
+    st.session_state.active_chat_id = new_chat_id
+    st.session_state.chats[new_chat_id] = {
+        "name": "Nuevo chat",
+        "messages": []
+    }
+
+chat_id = st.session_state.active_chat_id
             st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
             
             # Limpia el "Pensando..." y refresca
@@ -258,7 +267,7 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
     buffer = io.BytesIO(imagen_subida.read())
     st.session_state.chats[chat_id]["messages"].append({
         "role": "user",
-        "content": prompt or "📷 Imagen sin texto",
+        "content": prompt if prompt else ""
         "image_bytes": buffer.getvalue()
     })
 
@@ -304,12 +313,6 @@ with st.spinner("Analizando imagen..."):
 st.session_state.modo_ocr = False
 del st.session_state.imagen_cargada
 st.rerun()
-
-# Añade respuesta como si la IA respondiera
-st.session_state.chats[chat_id]["messages"].append({
-    "role": "assistant",
-    "content": respuesta_ocr
-})
 
 # Limpieza del estado
 st.session_state.modo_ocr = False
