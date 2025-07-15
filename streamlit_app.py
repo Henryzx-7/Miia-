@@ -252,6 +252,28 @@ pass  # Eliminamos esta parte
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 if prompt:
 
+    # --- Recuperar ID y validar imagen ---
+    chat_id = st.session_state.active_chat_id
+    imagen_subida = st.session_state.imagen_cargada
+
+    # Si estamos en modo OCR pero no hay imagen cargada, cancelar
+    if st.session_state.modo_ocr and imagen_subida is None:
+        st.warning("⚠️ No se ha cargado ninguna imagen.")
+        st.session_state.modo_ocr = False
+        st.rerun()
+
+    # --- Modo OCR (imagen a texto) ---
+    if st.session_state.modo_ocr:
+        # TODO el bloque de OCR va aquí (te lo doy abajo)
+
+    # --- Modo generación de imagen ---
+    elif st.session_state.modo_generacion == "imagen":
+        # TODO el bloque de generación de imagen va aquí
+
+    # --- Modo texto (chat normal) ---
+    else:
+        # TODO el bloque de chat con IA va aquí
+
     # Recuperar ID del chat activo e imagen
     chat_id = st.session_state.active_chat_id
     imagen_subida = st.session_state.imagen_cargada
