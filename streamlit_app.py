@@ -216,15 +216,14 @@ with st.container():
 if st.session_state.mostrar_selector:
     with st.container():
         modo_humano = st.radio(
-    "Selecciona el modo:",
-    ["¡Habla con Tigre!", "Generar imágenes"],
-    index=0 if st.session_state.modo_generacion == "texto" else 1,
-    key="modo_radio",
-    label_visibility="collapsed"
-)
-
-# Traduce a modo técnico
-st.session_state.modo_generacion = "texto" if modo_humano == "¡Habla con Tigre!" else "imagen"
+            "Selecciona el modo:",
+            ["¡Habla con Tigre!", "Generar imágenes"],
+            index=0 if st.session_state.modo_generacion == "texto" else 1,
+            key="modo_radio",
+            label_visibility="collapsed"
+        )
+        # 👇 Solo se ejecuta si se muestra el selector
+        st.session_state.modo_generacion = "texto" if modo_humano == "¡Habla con Tigre!" else "imagen"
 # Detectar el modo desde URL temporal
 # (Ya no es necesario usar query_params porque usamos st.radio)
 pass  # Eliminamos esta parte
