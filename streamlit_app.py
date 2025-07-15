@@ -243,17 +243,16 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
         imagen_subida = st.session_state.imagen_cargada
 
     # Asegura que haya chat activo
+        # Mostrar la imagen subida dentro del flujo del chat
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
         st.session_state.active_chat_id = new_chat_id
         st.session_state.chats[new_chat_id] = {
-            "name": "OCR de imagen",
+            "name": "Imagen subida",
             "messages": []
         }
 
     chat_id = st.session_state.active_chat_id
-
-    # Guarda imagen en el historial del usuario
     buffer = io.BytesIO(imagen_subida.read())
     st.session_state.chats[chat_id]["messages"].append({
         "role": "user",
@@ -261,7 +260,7 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
         "image_bytes": buffer.getvalue()
     })
 
-    # Analiza imagen con OCRFlux
+    # 🧠 Mostrar animación en el flujo
     with chat_container:
         spinner_placeholder = st.empty()
         with spinner_placeholder.container():
@@ -285,75 +284,14 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
         except Exception as e:
             respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
 
-    # Añade respuesta como si la IA la diera
     st.session_state.chats[chat_id]["messages"].append({
         "role": "assistant",
         "content": respuesta_ocr
     })
 
-    # Limpieza del estado y refresco
     st.session_state.modo_ocr = False
     del st.session_state.imagen_cargada
     st.rerun()
-# Mostrar input adicional para texto opcional
-texto_adicional = st.text_input("Agrega un comentario (opcional):", key="comentario_ocr")
-
-with st.spinner("Analizando imagen..."):
-    try:
-        headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-        imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-        payload = {
-            "inputs": {
-                "image": imagen_base64,
-                "question": texto_adicional or "Describe el contenido de esta imagen"
-            }
-        }
-        response = requests.post(
-            "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
-            headers=headers,
-            json=payload
-        )
-
-        if response.status_code == 200:
-            resultado = response.json()
-            respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
-        else:
-            respuesta_ocr = f"❌ Error en la API: {response.status_code} - {response.text}"
-
-    except Exception as e:
-        respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
-
-    # Guardar respuesta como si la IA respondiera
-    st.session_state.chats[chat_id]["messages"].append({
-        "role": "assistant",
-        "content": respuesta_ocr
-    })
-
-    # Limpieza del estado
-    st.session_state.modo_ocr = False
-    del st.session_state.imagen_cargada
-    st.rerun()
-    with col2:
-        if st.button("➕", key="plus_button", help="Cambiar modo", disabled=st.session_state.bloqueado):
-            st.session_state.mostrar_selector = not st.session_state.mostrar_selector
-                # 🖼️ Botón de imagen con "+" en una esquina
-        imagen_cargada = st.file_uploader(
-            "", 
-            type=["png", "jpg", "jpeg"], 
-            label_visibility="collapsed",
-            key="image_ocr_uploader"
-        )
-
-        if imagen_cargada:
-            st.session_state.modo_ocr = True
-            st.session_state.ocr_image_bytes = imagen_cargada.read()
-            st.rerun()  # 👉 Reinicia para que se procese
-            # Botón con ícono de imagen 📷➕
-        uploaded_file = st.file_uploader(" ", type=["png", "jpg", "jpeg"], label_visibility="collapsed", key="upload_imagen", accept_multiple_files=False)
-        if uploaded_file is not None:
-            st.session_state.imagen_cargada = uploaded_file
-            st.session_state.modo_ocr = True  # Activamos el modo OCR
-            st.rerun()
 
 # Selector flotante de modo
 # Selector flotante de modo (usando st.radio en lugar de HTML)
