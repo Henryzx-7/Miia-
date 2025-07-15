@@ -204,15 +204,15 @@ if "bloqueado" not in st.session_state:
 # Input del usuario al final de la página
 with st.container():
     col1, col2 = st.columns([10, 1])
-    with col1:
-if st.session_state.bloqueado:
-    prompt = None
-    st.chat_input("Generando imagen... espera un momento.", disabled=True)
-else:
-    prompt = st.chat_input(
-        "Escribele lo que quieras...", 
-        key="chat_input"
-    )
+with col1:
+    if st.session_state.bloqueado:
+        prompt = None
+        st.chat_input("Generando imagen... espera un momento.", disabled=True)
+    else:
+        prompt = st.chat_input(
+            "Escribele lo que quieras...", 
+            key="chat_input"
+        )
     with col2:
         if st.button("➕", key="plus_button", help="Cambiar modo", disabled=st.session_state.bloqueado):
             st.session_state.mostrar_selector = not st.session_state.mostrar_selector
