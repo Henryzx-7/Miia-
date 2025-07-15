@@ -269,7 +269,7 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
             st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
     # Procesar imagen con OCRFlux
-    with st.spinner("Analizando imagen..."):
+with st.spinner("Analizando imagen..."):
     try:
         headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
         imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
