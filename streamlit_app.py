@@ -314,11 +314,10 @@ st.session_state.modo_ocr = False
 del st.session_state.imagen_cargada
 st.rerun()
     # Añade la respuesta de la IA
-    st.session_state.chats[chat_id]["messages"].append({
-        "role": "assistant",
-        "content": respuesta_ocr
-    })
-
+        st.session_state.chats[chat_id]["messages"].append({
+            "role": "assistant",
+            "content": respuesta_ocr
+        })
     # Limpiar estado y reiniciar
     st.session_state.modo_ocr = False
     del st.session_state.imagen_cargada
