@@ -252,18 +252,9 @@ pass  # Eliminamos esta parte
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 if prompt:
 
-    if st.session_state.modo_ocr and st.session_state.imagen_cargada:
-    imagen_subida = st.session_state.imagen_cargada
-
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": "OCR de imagen",
-            "messages": []
-        }
-
+    # Recuperar ID del chat activo e imagen
     chat_id = st.session_state.active_chat_id
+    imagen_subida = st.session_state.imagen_cargada
 
     # Guardar imagen en el historial
     buffer = io.BytesIO(imagen_subida.read())
