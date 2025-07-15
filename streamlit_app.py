@@ -1,4 +1,3 @@
-# streamlit_app.py
 import streamlit as st
 from huggingface_hub import InferenceClient
 import time
@@ -188,23 +187,9 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
             
             # Añade la respuesta al historial
-if st.session_state.active_chat_id and st.session_state.chats[st.session_state.active_chat_id]["messages"]:
-    last_message = st.session_state.chats[st.session_state.active_chat_id]["messages"][-1]
-    if last_message["role"] == "user" and st.session_state.modo_generacion == "texto":
-        with chat_container:
-            thinking_placeholder = st.empty()
-            with thinking_placeholder.container():
-                st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
-
-            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
-            response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
-
-            # 👇 ESTA LÍNEA TIENE QUE TENER LA MISMA SANGRÍA que response_text
-            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({
-                "role": "assistant",
-                "content": response_text
-            })
-
+            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
+            
+            # Limpia el "Pensando..." y refresca
             thinking_placeholder.empty()
             st.rerun()
             # Inicializa el modo si no existe
@@ -212,126 +197,18 @@ if "modo_generacion" not in st.session_state:
     st.session_state.modo_generacion = "texto"
 if "mostrar_selector" not in st.session_state:
     st.session_state.mostrar_selector = False
-# Bloquea la interacción si se está generando una imagen
-if "bloqueado" not in st.session_state:
-    st.session_state.bloqueado = False
-# Estado para cargar imagen y texto opcional
-if "imagen_cargada" not in st.session_state:
-    st.session_state.imagen_cargada = None
-if "texto_adicional" not in st.session_state:
-    st.session_state.texto_adicional = ""
-if "modo_ocr" not in st.session_state:
-    st.session_state.modo_ocr = False
-# --- INPUT DEL USUARIO Y BOTONES DE MODO ---
-if not st.session_state.get("modo_ocr", False):
-    with st.container():
-        col1, col2 = st.columns([10, 1])
 
-        with col1:
-            if st.session_state.bloqueado:
-                prompt = None
-                st.chat_input("Generando imagen... espera un momento.", disabled=True)
-            else:
-                prompt = st.chat_input("Escríbele lo que quieras...", key="chat_input")
-
-        with col2:
-            # Botón de cambio de modo ➕
-            if st.button("➕", key="plus_button", help="Cambiar modo o subir imagen", disabled=st.session_state.bloqueado):
-                st.session_state.mostrar_selector = not st.session_state.mostrar_selector
-
-            # Botón con ícono de imagen 📷➕
-            imagen_cargada = st.file_uploader(
-                "📷➕", 
-                type=["png", "jpg", "jpeg"], 
-                label_visibility="collapsed",
-                key="upload_imagen",
-                accept_multiple_files=False
-            )
-
-            if imagen_cargada:
-                st.session_state.imagen_cargada = imagen_cargada
-                st.session_state.modo_ocr = True
-                st.rerun()
-    # Si se subió una imagen para OCR
-# Si se subió una imagen para OCR
-if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_cargada" in st.session_state:
-    imagen_subida = st.session_state.imagen_cargada
-
-    # Crear nuevo chat si no existe
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": "OCR de imagen",
-            "messages": []
-        }
-
-    chat_id = st.session_state.active_chat_id
-
-    # Guarda imagen en el historial del usuario
-        # Guarda imagen en el historial del usuario
-    buffer = io.BytesIO(imagen_subida.read())
-    st.session_state.chats[chat_id]["messages"].append({
-        "role": "user",
-        "content": prompt or "📷 Imagen sin texto",
-        "image_bytes": buffer.getvalue()
-    })
-
-    # Animación de "analizando"
-    with chat_container:
-        spinner_placeholder = st.empty()
-        with spinner_placeholder.container():
-            st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
-    # Procesar imagen con OCRFlux
-with st.spinner("Analizando imagen..."):
-    try:
-        headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-        imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-        data = {
-            "image": imagen_base64,
-            "query": prompt or "Describe el contenido de esta imagen"
-        }
-        response = requests.post(
-            "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
-            headers=headers,
-            json=data
+# Input del usuario al final de la página
+with st.container():
+    col1, col2 = st.columns([10, 1])
+    with col1:
+        prompt = st.chat_input(
+            "Escribele lo que quieras...", 
+            key="chat_input"
         )
-
-        if response.content:
-            resultado = response.json()
-            respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
-        else:
-            respuesta_ocr = "❌ La API no devolvió ningún contenido."
-
-        st.session_state.chats[chat_id]["messages"].append({
-            "role": "assistant",
-            "content": respuesta_ocr
-        })
-
-    except Exception as e:
-        st.session_state.chats[chat_id]["messages"].append({
-            "role": "assistant",
-            "content": f"❌ Error al procesar la imagen: {e}"
-        })
-
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": "Nuevo chat",
-            "messages": []
-        }
-
-    chat_id = st.session_state.active_chat_id
-# 👇 Y justo después de esto (fuera del try-except) ponés la limpieza:
-st.session_state.modo_ocr = False
-del st.session_state.imagen_cargada
-st.rerun()
-
-# Limpieza del estado
-st.session_state.modo_ocr = False
-del st.session_state.imagen_cargada
-st.rerun()
+    with col2:
+        if st.button("➕", key="plus_button", help="Cambiar modo"):
+            st.session_state.mostrar_selector = not st.session_state.mostrar_selector
 
 # Selector flotante de modo
 # Selector flotante de modo (usando st.radio en lugar de HTML)
@@ -351,16 +228,6 @@ if st.session_state.mostrar_selector:
 pass  # Eliminamos esta parte
 
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
-# 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
-# 🔒 Evita que el usuario interactúe durante la generación de imagen o análisis OCR
-if st.session_state.get("bloqueado", False):
-    st.warning("⏳ Por favor espera... la IA aún está generando una imagen o analizando una imagen enviada.")
-    st.stop()
-
-# ⚠️ Evita conflicto entre OCR y otros modos
-if st.session_state.get("modo_ocr", False) and prompt:
-    st.warning("⚠️ No puedes enviar texto mientras se analiza una imagen. Espera a que se procese.")
-    st.stop()
 if prompt:
     # Si no hay chat activo, se crea uno
     if st.session_state.active_chat_id is None:
@@ -387,7 +254,6 @@ if prompt:
                 st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos porque muchos usuarios la están usando.</div></div>", unsafe_allow_html=True)
 
         try:
-            st.session_state.bloqueado = True
             imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
             buffer = io.BytesIO()
             imagen.save(buffer, format="PNG")
@@ -396,14 +262,11 @@ if prompt:
                 "content": "Aquí está tu imagen:",
                 "image_bytes": buffer.getvalue()
             })
-            st.session_state.bloqueado = False
-            imagen_placeholder.empty()
-            st.rerun()
         except Exception as e:
-            st.session_state.bloqueado = False
             st.session_state.chats[chat_id]["messages"].append({
                 "role": "assistant",
-                "content": f"❌ Error al generar la imagen: {e}"
+                "content": f"❌ Error generando imagen: {e}"
             })
-            imagen_placeholder.empty()
-            st.rerun()
+
+        imagen_placeholder.empty()
+        st.rerun()
