@@ -269,19 +269,19 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
     chat_id = st.session_state.active_chat_id
 
     # Guarda imagen en el historial del usuario
+        # Guarda imagen en el historial del usuario
     buffer = io.BytesIO(imagen_subida.read())
-st.session_state.chats[chat_id]["messages"].append({
-    "role": "user",
-    "content": prompt or "📷 Imagen sin texto",
-    "image_bytes": buffer.getvalue()
-})
+    st.session_state.chats[chat_id]["messages"].append({
+        "role": "user",
+        "content": prompt or "📷 Imagen sin texto",
+        "image_bytes": buffer.getvalue()
+    })
 
     # Animación de "analizando"
     with chat_container:
         spinner_placeholder = st.empty()
         with spinner_placeholder.container():
             st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
-
     # Procesar imagen con OCRFlux
 with st.spinner("Analizando imagen..."):
     try:
