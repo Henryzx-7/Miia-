@@ -208,18 +208,35 @@ if "texto_adicional" not in st.session_state:
     st.session_state.texto_adicional = ""
 if "modo_ocr" not in st.session_state:
     st.session_state.modo_ocr = False
-# Input del usuario al final de la página
+# --- INPUT DEL USUARIO Y BOTONES DE MODO ---
 with st.container():
     col1, col2 = st.columns([10, 1])
-with col1:
-    if st.session_state.bloqueado:
-        prompt = None
-        st.chat_input("Generando imagen... espera un momento.", disabled=True)
-    else:
-        prompt = st.chat_input(
-            "Escribele lo que quieras...", 
-            key="chat_input"
+
+    with col1:
+        if st.session_state.bloqueado:
+            prompt = None
+            st.chat_input("Generando imagen... espera un momento.", disabled=True)
+        else:
+            prompt = st.chat_input("Escríbele lo que quieras...", key="chat_input")
+
+    with col2:
+        # Botón de cambio de modo ➕
+        if st.button("➕", key="plus_button", help="Cambiar modo o subir imagen", disabled=st.session_state.bloqueado):
+            st.session_state.mostrar_selector = not st.session_state.mostrar_selector
+
+        # Botón con ícono de imagen 📷➕
+        imagen_cargada = st.file_uploader(
+            "📷➕", 
+            type=["png", "jpg", "jpeg"], 
+            label_visibility="collapsed",
+            key="upload_imagen",
+            accept_multiple_files=False
         )
+
+        if imagen_cargada:
+            st.session_state.imagen_cargada = imagen_cargada
+            st.session_state.modo_ocr = True
+            st.rerun()
     # Si se subió una imagen para OCR
 if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_cargada" in st.session_state:
     imagen_subida = st.session_state.imagen_cargada
