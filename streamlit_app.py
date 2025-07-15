@@ -239,20 +239,22 @@ if not st.session_state.get("modo_ocr", False):
                 st.session_state.modo_ocr = True
                 st.rerun()
     # Si se subió una imagen para OCR
+# Si se subió una imagen para OCR
 if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_cargada" in st.session_state:
-        imagen_subida = st.session_state.imagen_cargada
+    imagen_subida = st.session_state.imagen_cargada
 
-    # Asegura que haya chat activo
-        # Mostrar la imagen subida dentro del flujo del chat
+    # Crear nuevo chat si no existe
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
         st.session_state.active_chat_id = new_chat_id
         st.session_state.chats[new_chat_id] = {
-            "name": "Imagen subida",
+            "name": "OCR de imagen",
             "messages": []
         }
 
     chat_id = st.session_state.active_chat_id
+
+    # Guarda imagen en el historial del usuario
     buffer = io.BytesIO(imagen_subida.read())
     st.session_state.chats[chat_id]["messages"].append({
         "role": "user",
@@ -260,12 +262,13 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
         "image_bytes": buffer.getvalue()
     })
 
-    # 🧠 Mostrar animación en el flujo
+    # Animación de "analizando"
     with chat_container:
         spinner_placeholder = st.empty()
         with spinner_placeholder.container():
             st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
+    # Procesar imagen con OCRFlux
     with st.spinner("Analizando imagen..."):
         try:
             headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
@@ -284,11 +287,13 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
         except Exception as e:
             respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
 
+    # Añade la respuesta de la IA
     st.session_state.chats[chat_id]["messages"].append({
         "role": "assistant",
         "content": respuesta_ocr
     })
 
+    # Limpiar estado y reiniciar
     st.session_state.modo_ocr = False
     del st.session_state.imagen_cargada
     st.rerun()
