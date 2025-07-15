@@ -212,20 +212,22 @@ with st.container():
             "Escribele lo que quieras...", 
             key="chat_input"
         )
-    with col2:
-        if st.button("➕", key="plus_button", help="Cambiar modo"):
-            st.session_state.mostrar_selector = not st.session_state.mostrar_selector
-                imagen_cargada = st.file_uploader(
-        "📷➕", 
-        type=["png", "jpg", "jpeg"], 
-        label_visibility="collapsed",
-        key="upload_imagen",
-        accept_multiple_files=False
-    )
-    if imagen_cargada:
-        st.session_state.imagen_cargada = imagen_cargada
-        st.session_state.modo_ocr = True
-        st.rerun()
+            with col2:
+            if st.button("➕", key="plus_button", help="Cambiar modo o subir imagen", disabled=st.session_state.bloqueado):
+                st.session_state.mostrar_selector = not st.session_state.mostrar_selector
+
+            # Subida de imagen (OCR)
+            imagen_cargada = st.file_uploader(
+                "📷➕",
+                type=["png", "jpg", "jpeg"],
+                label_visibility="collapsed",
+                key="upload_imagen"
+            )
+
+            if imagen_cargada:
+                st.session_state.imagen_cargada = imagen_cargada
+                st.session_state.modo_ocr = True
+                st.rerun()
 
 # Selector flotante de modo
 # Selector flotante de modo (usando st.radio en lugar de HTML)
