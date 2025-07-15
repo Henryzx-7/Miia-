@@ -262,20 +262,28 @@ else:
 
     try:
         st.session_state.bloqueado = True  # 🛑 Bloqueamos todo mientras se genera la imagen
+
         imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
         buffer = io.BytesIO()
         imagen.save(buffer, format="PNG")
+
         st.session_state.chats[chat_id]["messages"].append({
             "role": "assistant",
             "content": "Aquí está tu imagen:",
             "image_bytes": buffer.getvalue()
         })
-        except Exception as e:
-            st.session_state.chats[chat_id]["messages"].append({
-                "role": "assistant",
-                "content": f"❌ Error generando imagen: {e}"
-            })
+
+        st.session_state.bloqueado = False  # 🔓 Desbloqueamos después de generar
+        imagen_placeholder.empty()
+        st.rerun()
+
+    except Exception as e:
+        st.session_state.bloqueado = False  # 🔓 Desbloqueamos incluso si hay error
+
+        st.session_state.chats[chat_id]["messages"].append({
+            "role": "assistant",
+            "content": f"❌ Error generando imagen: {e}"
+        })
 
         imagen_placeholder.empty()
-            st.session_state.bloqueado = False  # ✅ Desbloqueamos al terminar
         st.rerun()
