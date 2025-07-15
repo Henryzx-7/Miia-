@@ -289,19 +289,21 @@ with st.spinner("Analizando imagen..."):
         else:
             respuesta_ocr = "❌ La API no devolvió ningún contenido."
 
+        st.session_state.chats[chat_id]["messages"].append({
+            "role": "assistant",
+            "content": respuesta_ocr
+        })
+
     except Exception as e:
-        respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
+        st.session_state.chats[chat_id]["messages"].append({
+            "role": "assistant",
+            "content": f"❌ Error al procesar la imagen: {e}"
+        })
 
-    # Guardar respuesta como si la IA respondiera
-    st.session_state.chats[chat_id]["messages"].append({
-        "role": "assistant",
-        "content": respuesta_ocr
-    })
-
-    # Limpieza del estado
-    st.session_state.modo_ocr = False
-    del st.session_state.imagen_cargada
-    st.rerun()
+# 👇 Y justo después de esto (fuera del try-except) ponés la limpieza:
+st.session_state.modo_ocr = False
+del st.session_state.imagen_cargada
+st.rerun()
 
 # Añade respuesta como si la IA respondiera
 st.session_state.chats[chat_id]["messages"].append({
