@@ -316,12 +316,6 @@ st.session_state.modo_ocr = False
 del st.session_state.imagen_cargada
 st.rerun()
 
-        })
-    # Limpiar estado y reiniciar
-    st.session_state.modo_ocr = False
-    del st.session_state.imagen_cargada
-    st.rerun()
-
 # Selector flotante de modo
 # Selector flotante de modo (usando st.radio en lugar de HTML)
 if st.session_state.mostrar_selector:
