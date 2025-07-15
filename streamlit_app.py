@@ -188,18 +188,23 @@ if st.session_state.active_chat_id and st.session_state.chats[st.session_state.a
             response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
             
             # Añade la respuesta al historial
-if st.session_state.active_chat_id is None:
-    new_chat_id = str(time.time())
-    st.session_state.active_chat_id = new_chat_id
-    st.session_state.chats[new_chat_id] = {
-        "name": "Nuevo chat",
-        "messages": []
-    }
+if st.session_state.active_chat_id and st.session_state.chats[st.session_state.active_chat_id]["messages"]:
+    last_message = st.session_state.chats[st.session_state.active_chat_id]["messages"][-1]
+    if last_message["role"] == "user" and st.session_state.modo_generacion == "texto":
+        with chat_container:
+            thinking_placeholder = st.empty()
+            with thinking_placeholder.container():
+                st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Pensando…</div></div>", unsafe_allow_html=True)
 
-chat_id = st.session_state.active_chat_id
-            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({"role": "assistant", "content": response_text})
-            
-            # Limpia el "Pensando..." y refresca
+            historial_para_api = st.session_state.chats[st.session_state.active_chat_id]["messages"]
+            response_text = get_hex_response(client_ia, last_message["content"], historial_para_api)
+
+            # 👇 ESTA LÍNEA TIENE QUE TENER LA MISMA SANGRÍA que response_text
+            st.session_state.chats[st.session_state.active_chat_id]["messages"].append({
+                "role": "assistant",
+                "content": response_text
+            })
+
             thinking_placeholder.empty()
             st.rerun()
             # Inicializa el modo si no existe
