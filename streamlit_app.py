@@ -201,6 +201,13 @@ if "mostrar_selector" not in st.session_state:
 # Bloquea la interacción si se está generando una imagen
 if "bloqueado" not in st.session_state:
     st.session_state.bloqueado = False
+# Estado para cargar imagen y texto opcional
+if "imagen_cargada" not in st.session_state:
+    st.session_state.imagen_cargada = None
+if "texto_adicional" not in st.session_state:
+    st.session_state.texto_adicional = ""
+if "modo_ocr" not in st.session_state:
+    st.session_state.modo_ocr = False
 # Input del usuario al final de la página
 with st.container():
     col1, col2 = st.columns([10, 1])
@@ -213,9 +220,80 @@ with col1:
             "Escribele lo que quieras...", 
             key="chat_input"
         )
+    # Si se subió una imagen para OCR
+if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_cargada" in st.session_state:
+    imagen_subida = st.session_state.imagen_cargada
+
+    # Mostrar la imagen subida dentro del flujo del chat
+    if st.session_state.active_chat_id is None:
+        new_chat_id = str(time.time())
+        st.session_state.active_chat_id = new_chat_id
+        st.session_state.chats[new_chat_id] = {
+            "name": "Imagen subida",
+            "messages": []
+        }
+
+    chat_id = st.session_state.active_chat_id
+    buffer = io.BytesIO(imagen_subida.read())
+    st.session_state.chats[chat_id]["messages"].append({
+        "role": "user",
+        "content": "📷 Imagen enviada para análisis OCR",
+        "image_bytes": buffer.getvalue()
+    })
+
+    # Mostrar input adicional para texto opcional
+    texto_adicional = st.text_input("Agrega un comentario (opcional):", key="comentario_ocr")
+
+    with st.spinner("Analizando imagen..."):
+        try:
+            # Llamamos a la IA de OCR
+            headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
+            imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            data = {
+                "image": imagen_base64,
+                "query": texto_adicional or "Describe el contenido de esta imagen"
+            }
+            response = requests.post(
+                "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
+                headers=headers,
+                json=data
+            )
+            resultado = response.json()
+            respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
+        except Exception as e:
+            respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
+
+    # Guardar respuesta como si la IA respondiera
+    st.session_state.chats[chat_id]["messages"].append({
+        "role": "assistant",
+        "content": respuesta_ocr
+    })
+
+    # Limpieza del estado
+    st.session_state.modo_ocr = False
+    del st.session_state.imagen_cargada
+    st.rerun()
     with col2:
         if st.button("➕", key="plus_button", help="Cambiar modo", disabled=st.session_state.bloqueado):
             st.session_state.mostrar_selector = not st.session_state.mostrar_selector
+                # 🖼️ Botón de imagen con "+" en una esquina
+        imagen_cargada = st.file_uploader(
+            "", 
+            type=["png", "jpg", "jpeg"], 
+            label_visibility="collapsed",
+            key="image_ocr_uploader"
+        )
+
+        if imagen_cargada:
+            st.session_state.modo_ocr = True
+            st.session_state.ocr_image_bytes = imagen_cargada.read()
+            st.rerun()  # 👉 Reinicia para que se procese
+            # Botón con ícono de imagen 📷➕
+        uploaded_file = st.file_uploader(" ", type=["png", "jpg", "jpeg"], label_visibility="collapsed", key="upload_imagen", accept_multiple_files=False)
+        if uploaded_file is not None:
+            st.session_state.imagen_cargada = uploaded_file
+            st.session_state.modo_ocr = True  # Activamos el modo OCR
+            st.rerun()
 
 # Selector flotante de modo
 # Selector flotante de modo (usando st.radio en lugar de HTML)
@@ -236,6 +314,15 @@ pass  # Eliminamos esta parte
 
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
+# 🔒 Evita que el usuario interactúe durante la generación de imagen o análisis OCR
+if st.session_state.get("bloqueado", False):
+    st.warning("⏳ Por favor espera... la IA aún está generando una imagen o analizando una imagen enviada.")
+    st.stop()
+
+# ⚠️ Evita conflicto entre OCR y otros modos
+if st.session_state.get("modo_ocr", False) and prompt:
+    st.warning("⚠️ No puedes enviar texto mientras se analiza una imagen. Espera a que se procese.")
+    st.stop()
 if prompt:
     # Si no hay chat activo, se crea uno
     if st.session_state.active_chat_id is None:
@@ -282,3 +369,29 @@ if prompt:
             })
             imagen_placeholder.empty()
             st.rerun()
+    else:
+        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+
+        # 👇 Mostrar animación
+        with chat_container:
+            imagen_placeholder = st.empty()
+            with imagen_placeholder.container():
+                st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos porque muchos usuarios la están usando.</div></div>", unsafe_allow_html=True)
+
+        try:
+            imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
+            buffer = io.BytesIO()
+            imagen.save(buffer, format="PNG")
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": "Aquí está tu imagen:",
+                "image_bytes": buffer.getvalue()
+            })
+        except Exception as e:
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": f"❌ Error generando imagen: {e}"
+            })
+
+        imagen_placeholder.empty()
+        st.rerun()
