@@ -309,16 +309,20 @@ with st.spinner("Analizando imagen..."):
         })
 
     except Exception as e:
-if st.session_state.active_chat_id is None:
-    new_chat_id = str(time.time())
-    st.session_state.active_chat_id = new_chat_id
-    st.session_state.chats[new_chat_id] = {
-        "name": "Nuevo chat",
-        "messages": []
-    }
+    st.session_state.chats[chat_id]["messages"].append({
+        "role": "assistant",
+        "content": f"❌ Error al procesar la imagen: {e}"
+    })
 
-chat_id = st.session_state.active_chat_id
+    if st.session_state.active_chat_id is None:
+        new_chat_id = str(time.time())
+        st.session_state.active_chat_id = new_chat_id
+        st.session_state.chats[new_chat_id] = {
+            "name": "Nuevo chat",
+            "messages": []
+        }
 
+    chat_id = st.session_state.active_chat_id
 # 👇 Y justo después de esto (fuera del try-except) ponés la limpieza:
 st.session_state.modo_ocr = False
 del st.session_state.imagen_cargada
