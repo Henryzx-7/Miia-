@@ -265,19 +265,26 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
     with st.spinner("Analizando imagen..."):
         try:
             # Llamamos a la IA de OCR
-            headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-            imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-            data = {
-                "image": imagen_base64,
-                "query": texto_adicional or "Describe el contenido de esta imagen"
-            }
-            response = requests.post(
-                "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
-                headers=headers,
-                json=data
-            )
-            resultado = response.json()
-            respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
+headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
+imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+payload = {
+    "inputs": {
+        "image": imagen_base64,
+        "question": texto_adicional or "Describe el contenido de esta imagen"
+    }
+}
+response = requests.post(
+    "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
+    headers=headers,
+    json=payload
+)
+
+# 🔍 Verificamos si la respuesta fue exitosa
+if response.status_code == 200:
+    resultado = response.json()
+    respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
+else:
+    respuesta_ocr = f"❌ Error en la API: {response.status_code} - {response.text}"
         except Exception as e:
             respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
 
