@@ -308,7 +308,7 @@ with st.spinner("Analizando imagen..."):
             "content": respuesta_ocr
         })
 
-    except Exception as e:
+except Exception as e:
     st.session_state.chats[chat_id]["messages"].append({
         "role": "assistant",
         "content": f"❌ Error al procesar la imagen: {e}"
