@@ -269,28 +269,39 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
             st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
     # Procesar imagen con OCRFlux
-with st.spinner("Analizando imagen..."):
-    try:
-        headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-        imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-        data = {
-            "image": imagen_base64,
-            "query": prompt or "Describe el contenido de esta imagen"
-        }
-        response = requests.post(
-            "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
-            headers=headers,
-            json=data
-        )
+    with st.spinner("Analizando imagen..."):
+        try:
+            headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
+            imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            data = {
+                "image": imagen_base64,
+                "query": prompt or "Describe el contenido de esta imagen"
+            }
+            response = requests.post(
+                "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
+                headers=headers,
+                json=data
+            )
 
-        if response.content:
-            resultado = response.json()
-            respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
-        else:
-            respuesta_ocr = "❌ La API no devolvió ningún contenido."
+            if response.content:
+                resultado = response.json()
+                respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
+            else:
+                respuesta_ocr = "❌ La API no devolvió ningún contenido."
 
-    except Exception as e:
-        respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
+        except Exception as e:
+            respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
+
+        # Guardar respuesta como si la IA respondiera
+        st.session_state.chats[chat_id]["messages"].append({
+            "role": "assistant",
+            "content": respuesta_ocr
+        })
+
+        # Limpieza del estado
+        st.session_state.modo_ocr = False
+        del st.session_state.imagen_cargada
+        st.rerun()
 
 # Añade respuesta como si la IA respondiera
 st.session_state.chats[chat_id]["messages"].append({
