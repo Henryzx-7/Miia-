@@ -270,11 +270,11 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
 
     # Guarda imagen en el historial del usuario
     buffer = io.BytesIO(imagen_subida.read())
-    st.session_state.chats[chat_id]["messages"].append({
-        "role": "user",
-        "content": prompt if prompt else ""
-        "image_bytes": buffer.getvalue()
-    })
+st.session_state.chats[chat_id]["messages"].append({
+    "role": "user",
+    "content": prompt or "📷 Imagen sin texto",
+    "image_bytes": buffer.getvalue()
+})
 
     # Animación de "analizando"
     with chat_container:
