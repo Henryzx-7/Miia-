@@ -8,7 +8,7 @@ import requests, base64, io
 
 def generar_imagen_flux(prompt, token):
     headers = {"Authorization": f"Bearer {token}"}
-    payload = {"prompt": prompt}  # Este es correcto solo para la generación de imagen
+    payload = {"inputs": prompt}  # 👈 aquí está el cambio importante
     response = requests.post(
         "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev",
         headers=headers,
