@@ -197,6 +197,12 @@ if "modo_generacion" not in st.session_state:
     st.session_state.modo_generacion = "texto"
 if "mostrar_selector" not in st.session_state:
     st.session_state.mostrar_selector = False
+if "modo_ocr" not in st.session_state:
+    st.session_state.modo_ocr = False
+if "imagen_cargada" not in st.session_state:
+    st.session_state.imagen_cargada = None
+if "texto_adicional" not in st.session_state:
+    st.session_state.texto_adicional = ""
 
 # Input del usuario al final de la página
 with st.container():
@@ -209,6 +215,17 @@ with st.container():
     with col2:
         if st.button("➕", key="plus_button", help="Cambiar modo"):
             st.session_state.mostrar_selector = not st.session_state.mostrar_selector
+                imagen_cargada = st.file_uploader(
+        "📷➕", 
+        type=["png", "jpg", "jpeg"], 
+        label_visibility="collapsed",
+        key="upload_imagen",
+        accept_multiple_files=False
+    )
+    if imagen_cargada:
+        st.session_state.imagen_cargada = imagen_cargada
+        st.session_state.modo_ocr = True
+        st.rerun()
 
 # Selector flotante de modo
 # Selector flotante de modo (usando st.radio en lugar de HTML)
@@ -229,6 +246,63 @@ pass  # Eliminamos esta parte
 
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 if prompt:
+
+    if st.session_state.modo_ocr and st.session_state.imagen_cargada:
+    imagen_subida = st.session_state.imagen_cargada
+
+    if st.session_state.active_chat_id is None:
+        new_chat_id = str(time.time())
+        st.session_state.active_chat_id = new_chat_id
+        st.session_state.chats[new_chat_id] = {
+            "name": "OCR de imagen",
+            "messages": []
+        }
+
+    chat_id = st.session_state.active_chat_id
+
+    # Guardar imagen en el historial
+    buffer = io.BytesIO(imagen_subida.read())
+    st.session_state.chats[chat_id]["messages"].append({
+        "role": "user",
+        "content": "📷 Imagen enviada",
+        "image_bytes": buffer.getvalue()
+    })
+
+    with chat_container:
+        spinner = st.empty()
+        with spinner.container():
+            st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
+
+    try:
+        headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
+        imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        data = {
+            "image": imagen_base64,
+            "query": st.session_state.texto_adicional or "Describe el contenido de esta imagen"
+        }
+        response = requests.post(
+            "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
+            headers=headers,
+            json=data
+        )
+
+        if response.ok:
+            respuesta_ocr = response.json().get("generated_text", "❌ No se pudo analizar la imagen.")
+        else:
+            respuesta_ocr = "❌ La API no devolvió respuesta válida."
+
+    except Exception as e:
+        respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
+
+    st.session_state.chats[chat_id]["messages"].append({
+        "role": "assistant",
+        "content": respuesta_ocr
+    })
+
+    st.session_state.modo_ocr = False
+    st.session_state.imagen_cargada = None
+    spinner.empty()
+    st.rerun()
     # Si no hay chat activo, se crea uno
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
