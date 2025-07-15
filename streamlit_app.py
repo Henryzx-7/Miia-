@@ -205,29 +205,32 @@ if "texto_adicional" not in st.session_state:
     st.session_state.texto_adicional = ""
 
 # Input del usuario al final de la página
+# Input del usuario al final de la página
 with st.container():
     col1, col2 = st.columns([10, 1])
+
     with col1:
-        prompt = st.chat_input(
-            "Escribele lo que quieras...", 
-            key="chat_input"
+        if st.session_state.get("bloqueado", False):
+            prompt = None
+            st.chat_input("Procesando imagen... espera un momento.", disabled=True)
+        else:
+            prompt = st.chat_input("Escríbele lo que quieras...", key="chat_input")
+
+    with col2:
+        if st.button("➕", key="plus_button", help="Cambiar modo o subir imagen", disabled=st.session_state.get("bloqueado", False)):
+            st.session_state.mostrar_selector = not st.session_state.mostrar_selector
+
+        imagen_cargada = st.file_uploader(
+            "📷➕",
+            type=["png", "jpg", "jpeg"],
+            label_visibility="collapsed",
+            key="upload_imagen"
         )
-            with col2:
-            if st.button("➕", key="plus_button", help="Cambiar modo o subir imagen", disabled=st.session_state.bloqueado):
-                st.session_state.mostrar_selector = not st.session_state.mostrar_selector
 
-            # Subida de imagen (OCR)
-            imagen_cargada = st.file_uploader(
-                "📷➕",
-                type=["png", "jpg", "jpeg"],
-                label_visibility="collapsed",
-                key="upload_imagen"
-            )
-
-            if imagen_cargada:
-                st.session_state.imagen_cargada = imagen_cargada
-                st.session_state.modo_ocr = True
-                st.rerun()
+        if imagen_cargada:
+            st.session_state.imagen_cargada = imagen_cargada
+            st.session_state.modo_ocr = True
+            st.rerun()
 
 # Selector flotante de modo
 # Selector flotante de modo (usando st.radio en lugar de HTML)
