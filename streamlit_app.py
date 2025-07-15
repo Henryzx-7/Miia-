@@ -100,7 +100,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # --- LÓGICA DE LA IA Y FUNCIONES AUXILIARES ---
 @st.cache_resource
 def get_client():
@@ -122,6 +121,7 @@ def get_hex_response(client, user_message, chat_history):
     
     try:
         # Usamos stream=False para máxima estabilidad
+        time.sleep(2)
         response = client.chat_completion(messages=messages, max_tokens=2048, stream=False)
         return response.choices[0].message.content
     except Exception as e:
@@ -259,7 +259,7 @@ if prompt:
             imagen.save(buffer, format="PNG")
             st.session_state.chats[chat_id]["messages"].append({
                 "role": "assistant",
-                "content": prompt,
+                "content": "Aquí está tu imagen:",
                 "image_bytes": buffer.getvalue()
             })
         except Exception as e:
