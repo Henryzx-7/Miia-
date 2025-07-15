@@ -240,18 +240,20 @@ if not st.session_state.get("modo_ocr", False):
                 st.rerun()
     # Si se subió una imagen para OCR
 if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_cargada" in st.session_state:
-    imagen_subida = st.session_state.imagen_cargada
+        imagen_subida = st.session_state.imagen_cargada
 
-    # Mostrar la imagen subida dentro del flujo del chat
+    # Asegura que haya chat activo
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
         st.session_state.active_chat_id = new_chat_id
         st.session_state.chats[new_chat_id] = {
-            "name": "Imagen subida",
+            "name": "OCR de imagen",
             "messages": []
         }
 
     chat_id = st.session_state.active_chat_id
+
+    # Guarda imagen en el historial del usuario
     buffer = io.BytesIO(imagen_subida.read())
     st.session_state.chats[chat_id]["messages"].append({
         "role": "user",
@@ -259,6 +261,40 @@ if "modo_ocr" in st.session_state and st.session_state.modo_ocr and "imagen_carg
         "image_bytes": buffer.getvalue()
     })
 
+    # Analiza imagen con OCRFlux
+    with chat_container:
+        spinner_placeholder = st.empty()
+        with spinner_placeholder.container():
+            st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
+
+    with st.spinner("Analizando imagen..."):
+        try:
+            headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
+            imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            data = {
+                "image": imagen_base64,
+                "query": "Describe el contenido de esta imagen"
+            }
+            response = requests.post(
+                "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
+                headers=headers,
+                json=data
+            )
+            resultado = response.json()
+            respuesta_ocr = resultado.get("generated_text", "❌ No se pudo analizar la imagen.")
+        except Exception as e:
+            respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
+
+    # Añade respuesta como si la IA la diera
+    st.session_state.chats[chat_id]["messages"].append({
+        "role": "assistant",
+        "content": respuesta_ocr
+    })
+
+    # Limpieza del estado y refresco
+    st.session_state.modo_ocr = False
+    del st.session_state.imagen_cargada
+    st.rerun()
 # Mostrar input adicional para texto opcional
 texto_adicional = st.text_input("Agrega un comentario (opcional):", key="comentario_ocr")
 
