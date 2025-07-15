@@ -265,7 +265,7 @@ if prompt:
     # --- Modo OCR (imagen a texto) ---
     if st.session_state.modo_ocr:
         # TODO el bloque de OCR va aquí (te lo doy abajo)
-
+        pass
     # --- Modo generación de imagen ---
     elif st.session_state.modo_generacion == "imagen":
         # TODO el bloque de generación de imagen va aquí
