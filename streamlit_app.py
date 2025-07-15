@@ -198,17 +198,23 @@ if "modo_generacion" not in st.session_state:
     st.session_state.modo_generacion = "texto"
 if "mostrar_selector" not in st.session_state:
     st.session_state.mostrar_selector = False
-
+# Bloquea la interacción si se está generando una imagen
+if "bloqueado" not in st.session_state:
+    st.session_state.bloqueado = False
 # Input del usuario al final de la página
 with st.container():
     col1, col2 = st.columns([10, 1])
     with col1:
-        prompt = st.chat_input(
-            "Escribele lo que quieras...", 
-            key="chat_input"
-        )
+if st.session_state.bloqueado:
+    prompt = None
+    st.chat_input("Generando imagen... espera un momento.", disabled=True)
+else:
+    prompt = st.chat_input(
+        "Escribele lo que quieras...", 
+        key="chat_input"
+    )
     with col2:
-        if st.button("➕", key="plus_button", help="Cambiar modo"):
+        if st.button("➕", key="plus_button", help="Cambiar modo", disabled=st.session_state.bloqueado):
             st.session_state.mostrar_selector = not st.session_state.mostrar_selector
 
 # Selector flotante de modo
@@ -247,7 +253,7 @@ if prompt:
         st.rerun()
     else:
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
-
+            st.session_state.bloqueado = True  # 🛑 Bloqueamos todo mientras se genera la imagen
         # 👇 Mostrar animación
         with chat_container:
             imagen_placeholder = st.empty()
@@ -270,4 +276,5 @@ if prompt:
             })
 
         imagen_placeholder.empty()
+            st.session_state.bloqueado = False  # ✅ Desbloqueamos al terminar
         st.rerun()
