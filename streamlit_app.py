@@ -297,18 +297,16 @@ if prompt is not None and prompt.strip() != "":
 
         try:
             headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-            imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-            data = {
-                "image": imagen_base64,
-                "query": texto or "Describe el contenido de esta imagen"
+            files = {
+                "file": ("imagen.jpg", buffer.getvalue(), "image/jpeg")
             }
             response = requests.post(
-                "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
+                "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base",
                 headers=headers,
-                json=data
+                files=files
             )
             if response.ok:
-                respuesta_ocr = response.json().get("generated_text", "❌ No se pudo analizar la imagen.")
+                respuesta_ocr = response.json()[0].get("generated_text", "❌ No se pudo analizar la imagen.")
             else:
                 respuesta_ocr = "❌ La API no devolvió respuesta válida."
         except Exception as e:
