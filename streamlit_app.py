@@ -327,47 +327,74 @@ st.write("DEBUG modo:", st.session_state.modo_generacion)
 # MODO IMAGEN (generar desde prompt)
 if True:
     pass
-elif st.session_state.modo_generacion == "imagen":
-    # ✅ Asegurar que el chat exista
-    st.write("En modo imagen")
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
+# 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
+if prompt:
+    st.write("DEBUG prompt:", prompt)
+    st.write("Modo DEBUG:", st.session_state.modo_generacion)
 
-    chat_id = st.session_state.active_chat_id
-    if chat_id not in st.session_state.chats:
-        st.session_state.chats[chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
+    # MODO OCR (imagen + texto)
+    if st.session_state.modo_ocr and st.session_state.imagen_cargada:
+        # ... tu código actual para OCR ...
+        pass
 
-    # ✅ Guardamos el mensaje del usuario
-    st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+    # MODO IMAGEN (generar desde texto)
+    elif st.session_state.modo_generacion == "imagen":
+        if st.session_state.active_chat_id is None:
+            new_chat_id = str(time.time())
+            st.session_state.active_chat_id = new_chat_id
+            st.session_state.chats[new_chat_id] = {
+                "name": generate_chat_name(prompt),
+                "messages": []
+            }
 
-    # 👇 Mostramos animación de generando imagen
-    with chat_container:
-        imagen_placeholder = st.empty()
-        with imagen_placeholder.container():
-            st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos.</div></div>", unsafe_allow_html=True)
+        chat_id = st.session_state.active_chat_id
+        if chat_id not in st.session_state.chats:
+            st.session_state.chats[chat_id] = {
+                "name": generate_chat_name(prompt),
+                "messages": []
+            }
 
-    try:
-        imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
-        buffer = io.BytesIO()
-        imagen.save(buffer, format="PNG")
-        st.session_state.chats[chat_id]["messages"].append({
-            "role": "assistant",
-            "content": "Aquí está tu imagen:",
-            "image_bytes": buffer.getvalue()
-        })
-    except Exception as e:
-        st.session_state.chats[chat_id]["messages"].append({
-            "role": "assistant",
-            "content": f"❌ Error generando imagen: {e}"
-        })
+        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
 
-    imagen_placeholder.empty()
-    st.rerun()
+        with chat_container:
+            imagen_placeholder = st.empty()
+            with imagen_placeholder.container():
+                st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos.</div></div>", unsafe_allow_html=True)
+
+        try:
+            imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
+            buffer = io.BytesIO()
+            imagen.save(buffer, format="PNG")
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": "Aquí está tu imagen:",
+                "image_bytes": buffer.getvalue()
+            })
+        except Exception as e:
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": f"❌ Error generando imagen: {e}"
+            })
+
+        imagen_placeholder.empty()
+        st.rerun()
+
+    # ✅ MODO TEXTO NORMAL
+    elif st.session_state.modo_generacion == "texto":
+        if st.session_state.active_chat_id is None:
+            new_chat_id = str(time.time())
+            st.session_state.active_chat_id = new_chat_id
+            st.session_state.chats[new_chat_id] = {
+                "name": generate_chat_name(prompt),
+                "messages": []
+            }
+
+        chat_id = st.session_state.active_chat_id
+        if chat_id not in st.session_state.chats:
+            st.session_state.chats[chat_id] = {
+                "name": generate_chat_name(prompt),
+                "messages": []
+            }
+
+        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+        st.rerun()
