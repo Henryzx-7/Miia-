@@ -230,7 +230,7 @@ with st.container():
         if imagen_cargada:
             st.session_state.imagen_cargada = imagen_cargada
             st.session_state.modo_ocr = True
-            st.rerun()
+            st.toast("Imagen cargada. Escribe un mensaje si deseas y presiona Enter para enviarla.", icon="📷")
 
 # Selector flotante de modo
 # Selector flotante de modo (usando st.radio en lugar de HTML)
@@ -252,34 +252,33 @@ pass  # Eliminamos esta parte
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 if prompt:
-    # 👇 Si estamos en modo OCR y hay imagen cargada, no procesamos texto
+    # 👇 Si hay imagen pendiente, procesamos OCR en vez de texto
     if st.session_state.modo_ocr and st.session_state.imagen_cargada:
-        st.stop()  # Detenemos por completo este bloque
+        texto = prompt  # Guardamos lo que escribió el usuario
+        imagen = st.session_state.imagen_cargada
+        st.session_state.imagen_cargada = None
+        st.session_state.modo_ocr = False
 
-    # 👇 Si no hay chat activo, lo creamos
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(prompt),
-            "messages": []
-        }
+        # Creamos chat si no existe
+        if st.session_state.active_chat_id is None:
+            new_chat_id = str(time.time())
+            st.session_state.active_chat_id = new_chat_id
+            st.session_state.chats[new_chat_id] = {
+                "name": generate_chat_name(texto),
+                "messages": []
+            }
 
-    chat_id = st.session_state.active_chat_id
+        chat_id = st.session_state.active_chat_id
 
-    # ⬇️ Aquí seguís con el resto del flujo: OCR, Imagen o Texto...
-
-    # MODO OCR (imagen a texto)
-    if st.session_state.modo_ocr and st.session_state.imagen_cargada:
-        st.session_state.bloqueado = True
-
-        buffer = io.BytesIO(st.session_state.imagen_cargada.read())
+        # Guardamos mensaje del usuario con imagen y texto
+        buffer = io.BytesIO(imagen.read())
         st.session_state.chats[chat_id]["messages"].append({
             "role": "user",
-            "content": "📷 Imagen enviada",
+            "content": f"📷 Imagen enviada con mensaje: {texto}",
             "image_bytes": buffer.getvalue()
         })
 
+        # Mostramos "Analizando..."
         with chat_container:
             spinner = st.empty()
             with spinner.container():
@@ -290,7 +289,7 @@ if prompt:
             imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
             data = {
                 "image": imagen_base64,
-                "query": st.session_state.texto_adicional or "Describe el contenido de esta imagen"
+                "query": texto or "Describe el contenido de esta imagen"
             }
             response = requests.post(
                 "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
@@ -301,7 +300,6 @@ if prompt:
                 respuesta_ocr = response.json().get("generated_text", "❌ No se pudo analizar la imagen.")
             else:
                 respuesta_ocr = "❌ La API no devolvió respuesta válida."
-
         except Exception as e:
             respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
 
@@ -310,13 +308,7 @@ if prompt:
             "content": respuesta_ocr
         })
 
-        st.session_state.imagen_cargada = None
-        st.session_state.modo_ocr = False
-        st.session_state.bloqueado = False
         spinner.empty()
-        # 🧹 Limpieza extra para evitar bloqueo visual
-        st.session_state.chat_input = ""
-        st.session_state.mostrar_selector = False
         st.rerun()
 
     # MODO IMAGEN (generar desde prompt)
