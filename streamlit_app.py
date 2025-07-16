@@ -270,6 +270,12 @@ if prompt:
             }
 
         chat_id = st.session_state.active_chat_id
+        # ✅ Asegura que el chat exista (previene KeyError)
+        if chat_id not in st.session_state.chats:
+            st.session_state.chats[chat_id] = {
+                "name": generate_chat_name(texto),
+                "messages": []
+            }
 
         # Guardamos mensaje del usuario con imagen y texto
         buffer = io.BytesIO(imagen.read())
