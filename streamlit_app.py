@@ -348,9 +348,7 @@ if prompt is not None and prompt.strip() != "":
         st.rerun()
 
     # MODO TEXTO NORMAL (chat)
-# MODO TEXTO NORMAL (chat)
-else:
-    # ✅ Asegura que el chat exista
+elif st.session_state.modo_generacion == "texto" and prompt:
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
         st.session_state.active_chat_id = new_chat_id
@@ -360,7 +358,6 @@ else:
         }
 
     chat_id = st.session_state.active_chat_id
-
     if chat_id not in st.session_state.chats:
         st.session_state.chats[chat_id] = {
             "name": generate_chat_name(prompt),
