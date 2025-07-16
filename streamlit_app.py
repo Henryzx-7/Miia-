@@ -325,6 +325,8 @@ if prompt is not None and prompt.strip() != "":
 
 st.write("DEBUG modo:", st.session_state.modo_generacion)
 # MODO IMAGEN (generar desde prompt)
+if True:
+    pass
 elif st.session_state.modo_generacion == "imagen":
     # ✅ Asegurar que el chat exista
     st.write("En modo imagen")
