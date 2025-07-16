@@ -346,7 +346,24 @@ if prompt:
         st.rerun()
 
     # MODO TEXTO NORMAL (chat)
-    else:
-        chat_id = st.session_state.active_chat_id
-        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
-        st.rerun()
+# MODO TEXTO NORMAL (chat)
+else:
+    # ✅ Asegura que el chat exista
+    if st.session_state.active_chat_id is None:
+        new_chat_id = str(time.time())
+        st.session_state.active_chat_id = new_chat_id
+        st.session_state.chats[new_chat_id] = {
+            "name": generate_chat_name(prompt),
+            "messages": []
+        }
+
+    chat_id = st.session_state.active_chat_id
+
+    if chat_id not in st.session_state.chats:
+        st.session_state.chats[chat_id] = {
+            "name": generate_chat_name(prompt),
+            "messages": []
+        }
+
+    st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+    st.rerun()
