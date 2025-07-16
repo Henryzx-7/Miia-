@@ -229,7 +229,7 @@ with st.container():
             "📷➕",
             type=["png", "jpg", "jpeg"],
             label_visibility="collapsed",
-            key="upload_imagen"
+            key=f"upload_imagen_{st.session_state.uploader_key}"  # 👈 CAMBIO CLAVE AQUÍ
         )
 
         if imagen_cargada:
@@ -321,7 +321,6 @@ if prompt is not None and prompt.strip() != "":
         })
 
         spinner.empty()
-        st.session_state["upload_imagen"] = None
         st.rerun()
 
 st.write("DEBUG modo:", st.session_state.modo_generacion)
