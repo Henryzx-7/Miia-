@@ -258,6 +258,7 @@ if prompt:
         imagen = st.session_state.imagen_cargada
         st.session_state.imagen_cargada = None
         st.session_state.modo_ocr = False
+        st.session_state["upload_imagen"] = None
 
         # Creamos chat si no existe
         if st.session_state.active_chat_id is None:
