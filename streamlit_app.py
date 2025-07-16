@@ -252,7 +252,9 @@ pass  # Eliminamos esta parte
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 if prompt:
-
+    # 👇 Si hay imagen cargada y estamos en modo OCR, cancelamos el prompt
+if st.session_state.modo_ocr and st.session_state.imagen_cargada:
+    prompt = None
     # Si no hay chat activo, se crea uno
     if st.session_state.active_chat_id is None:
         new_chat_id = str(time.time())
