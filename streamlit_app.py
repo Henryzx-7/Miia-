@@ -215,7 +215,9 @@ with st.container():
             st.chat_input("Procesando imagen... espera un momento.", disabled=True)
         else:
             prompt = st.chat_input("Escríbele lo que quieras...", key="chat_input")
-
+            if prompt is not None and prompt.strip() == "":
+                prompt = None  # Evita que se envíen mensajes vacíos
+    
     with col2:
         if st.button("➕", key="plus_button", help="Cambiar modo o subir imagen", disabled=st.session_state.get("bloqueado", False)):
             st.session_state.mostrar_selector = not st.session_state.mostrar_selector
@@ -251,7 +253,7 @@ pass  # Eliminamos esta parte
 
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
-if prompt:
+if prompt is not None and prompt.strip() != "":
     # 👇 Si hay imagen pendiente, procesamos OCR en vez de texto
     if st.session_state.modo_ocr and st.session_state.imagen_cargada:
         texto = prompt  # Guardamos lo que escribió el usuario
