@@ -219,8 +219,7 @@ with st.container():
             prompt = st.chat_input("Escríbele lo que quieras...", key="chat_input")
             if prompt is not None and prompt.strip() == "":
                 prompt = None  # Evita que se envíen mensajes vacíos 
-            st.write("DEBUG prompt:", prompt)
-    
+
     with col2:
         if st.button("➕", key="plus_button", help="Cambiar modo o subir imagen", disabled=st.session_state.get("bloqueado", False)):
             st.session_state.mostrar_selector = not st.session_state.mostrar_selector
@@ -323,7 +322,6 @@ if prompt is not None and prompt.strip() != "":
         spinner.empty()
         st.rerun()
 
-st.write("DEBUG modo:", st.session_state.modo_generacion)
 # MODO IMAGEN (generar desde prompt)
 if True:
     pass
