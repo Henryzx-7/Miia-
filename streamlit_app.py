@@ -274,7 +274,7 @@ if prompt:
         buffer = io.BytesIO(imagen.read())
         st.session_state.chats[chat_id]["messages"].append({
             "role": "user",
-            "content": f"📷 Imagen enviada con mensaje: {texto}",
+            "content": f"{texto}",
             "image_bytes": buffer.getvalue()
         })
 
