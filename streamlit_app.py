@@ -341,5 +341,6 @@ if prompt:
 
     # MODO TEXTO NORMAL (chat)
     else:
+        chat_id = st.session_state.active_chat_id
         st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
         st.rerun()
