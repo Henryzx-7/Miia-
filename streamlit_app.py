@@ -330,8 +330,6 @@ if True:
     pass
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 if prompt:
-#    st.write("DEBUG prompt:", prompt)
-#    st.write("Modo DEBUG:", st.session_state.modo_generacion)
 
     # MODO OCR (imagen + texto)
     if st.session_state.modo_ocr and st.session_state.imagen_cargada:
