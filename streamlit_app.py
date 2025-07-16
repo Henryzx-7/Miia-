@@ -314,6 +314,9 @@ if prompt:
         st.session_state.modo_ocr = False
         st.session_state.bloqueado = False
         spinner.empty()
+        # 🧹 Limpieza extra para evitar bloqueo visual
+        st.session_state.chat_input = ""
+        st.session_state.mostrar_selector = False
         st.rerun()
 
     # MODO IMAGEN (generar desde prompt)
