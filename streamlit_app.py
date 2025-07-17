@@ -103,6 +103,38 @@ st.markdown("""
         margin-bottom: 5px;
         cursor: pointer;
     }
+    .custom-uploader label[data-testid="stFileUploadDropzone"] {
+        background-color: #202225;
+        border: 2px dashed #444;
+        padding: 20px;
+        border-radius: 15px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        position: relative;
+        height: 80px;
+        transition: background-color 0.3s ease;
+    }
+
+    .custom-uploader label[data-testid="stFileUploadDropzone"]:hover {
+        background-color: #2b2d31;
+    }
+
+    .custom-uploader label[data-testid="stFileUploadDropzone"]::before {
+        content: "📷";
+        font-size: 2em;
+        margin-right: 10px;
+    }
+
+    .custom-uploader label[data-testid="stFileUploadDropzone"]::after {
+        content: "➕";
+        font-size: 1.5em;
+        position: absolute;
+        top: 5px;
+        right: 10px;
+        color: #888;
+    }
 
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
@@ -233,11 +265,12 @@ with st.container():
         if st.button("➕", key="plus_button", help="Cambiar modo o subir imagen", disabled=st.session_state.get("bloqueado", False)):
             st.session_state.mostrar_selector = not st.session_state.mostrar_selector
 
+    with st.container():
         imagen_cargada = st.file_uploader(
-            "📷➕",
+            "",
             type=["png", "jpg", "jpeg"],
             label_visibility="collapsed",
-            key=f"upload_imagen_{st.session_state.uploader_key}"  # 👈 CAMBIO CLAVE AQUÍ
+            key="upload_imagen"
         )
 
         if imagen_cargada:
@@ -338,54 +371,69 @@ if prompt is not None and prompt.strip() != "":
 if True:
     pass
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
-if prompt:
+if st.session_state.imagen_cargada:
+    texto = prompt or "Describe el contenido de esta imagen"
+    imagen = st.session_state.imagen_cargada
+    st.session_state.imagen_cargada = None
+    st.session_state.modo_ocr = False
+    st.session_state.uploader_key += 1
 
-    # MODO OCR (imagen + texto)
-    if st.session_state.modo_ocr and st.session_state.imagen_cargada:
-        # ... tu código actual para OCR ...
-        pass
+    if st.session_state.active_chat_id is None:
+        new_chat_id = str(time.time())
+        st.session_state.active_chat_id = new_chat_id
+        st.session_state.chats[new_chat_id] = {
+            "name": generate_chat_name(texto),
+            "messages": []
+        }
 
-    # MODO IMAGEN (generar desde texto)
-    elif st.session_state.modo_generacion == "imagen":
-        if st.session_state.active_chat_id is None:
-            new_chat_id = str(time.time())
-            st.session_state.active_chat_id = new_chat_id
-            st.session_state.chats[new_chat_id] = {
-                "name": generate_chat_name(prompt),
-                "messages": []
-            }
+    chat_id = st.session_state.active_chat_id
+    if chat_id not in st.session_state.chats:
+        st.session_state.chats[chat_id] = {
+            "name": generate_chat_name(texto),
+            "messages": []
+        }
 
-        chat_id = st.session_state.active_chat_id
-        if chat_id not in st.session_state.chats:
-            st.session_state.chats[chat_id] = {
-                "name": generate_chat_name(prompt),
-                "messages": []
-            }
+    buffer = io.BytesIO(imagen.read())
+    st.session_state.chats[chat_id]["messages"].append({
+        "role": "user",
+        "content": f"{texto}",
+        "image_bytes": buffer.getvalue()
+    })
 
-        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
+    # Mostrar analizando
+    with chat_container:
+        spinner = st.empty()
+        with spinner.container():
+            st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
-        with chat_container:
-            imagen_placeholder = st.empty()
-            with imagen_placeholder.container():
-                st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos.</div></div>", unsafe_allow_html=True)
+    try:
+        headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
+        imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        data = {
+            "image": imagen_base64,
+            "query": texto
+        }
+        response = requests.post(
+            "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base",
+            headers=headers,
+            json=data
+        )
+        if response.ok:
+            result = response.json()
+            respuesta_ocr = result.get("generated_text", result.get("caption", "❌ No se pudo generar descripción."))
+        else:
+            respuesta_ocr = f"❌ Error HTTP {response.status_code}: {response.reason}"
+    except Exception as e:
+        respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
 
-        try:
-            imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
-            buffer = io.BytesIO()
-            imagen.save(buffer, format="PNG")
-            st.session_state.chats[chat_id]["messages"].append({
-                "role": "assistant",
-                "content": "Aquí está tu imagen:",
-                "image_bytes": buffer.getvalue()
-            })
-        except Exception as e:
-            st.session_state.chats[chat_id]["messages"].append({
-                "role": "assistant",
-                "content": f"❌ Error generando imagen: {e}"
-            })
+    st.session_state.chats[chat_id]["messages"].append({
+        "role": "assistant",
+        "content": respuesta_ocr
+    })
 
-        imagen_placeholder.empty()
-        st.rerun()
+    spinner.empty()
+    st.session_state["upload_imagen"] = None
+    st.rerun()
 
     # ✅ MODO TEXTO NORMAL
     elif st.session_state.modo_generacion == "texto":
