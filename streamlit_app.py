@@ -297,16 +297,17 @@ pass  # Eliminamos esta parte
 
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
 # 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
-if prompt is not None and prompt.strip() != "":
-    # 👇 Si hay imagen pendiente, procesamos OCR en vez de texto
+# 👇 Este bloque es independiente y solo se ejecuta si hay texto o imagen
+if prompt or st.session_state.imagen_cargada:
+
+    # MODO OCR (imagen + texto o imagen sola)
     if st.session_state.modo_ocr and st.session_state.imagen_cargada:
-        texto = prompt  # Guardamos lo que escribió el usuario
+        texto = prompt or "Describe la imagen"
         imagen = st.session_state.imagen_cargada
         st.session_state.imagen_cargada = None
         st.session_state.modo_ocr = False
         st.session_state.uploader_key += 1
 
-        # Creamos chat si no existe
         if st.session_state.active_chat_id is None:
             new_chat_id = str(time.time())
             st.session_state.active_chat_id = new_chat_id
@@ -316,43 +317,39 @@ if prompt is not None and prompt.strip() != "":
             }
 
         chat_id = st.session_state.active_chat_id
-        # ✅ Asegura que el chat exista (previene KeyError)
         if chat_id not in st.session_state.chats:
             st.session_state.chats[chat_id] = {
                 "name": generate_chat_name(texto),
                 "messages": []
             }
 
-        # Guardamos mensaje del usuario con imagen y texto
         buffer = io.BytesIO(imagen.read())
         st.session_state.chats[chat_id]["messages"].append({
             "role": "user",
-            "content": f"{texto}",
+            "content": texto,
             "image_bytes": buffer.getvalue()
         })
 
-        # Mostramos "Analizando..."
         with chat_container:
             spinner = st.empty()
             with spinner.container():
                 st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
         try:
-            headers = {
-                "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}",
-                "Accept": "application/json"
+            headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
+            imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            data = {
+                "image": imagen_base64,
+                "query": texto
             }
-
-            image_bytes = buffer.getvalue()
-
             response = requests.post(
-                "https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten",
+                "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base",
                 headers=headers,
-                data=image_bytes
+                json=data
             )
-
             if response.ok:
-                respuesta_ocr = response.json().get("generated_text", "❌ No se pudo analizar la imagen.")
+                respuesta_json = response.json()
+                respuesta_ocr = respuesta_json.get("generated_text", "❌ No se pudo analizar la imagen.")
             else:
                 respuesta_ocr = f"❌ Error HTTP {response.status_code}: {response.reason}"
 
@@ -367,75 +364,49 @@ if prompt is not None and prompt.strip() != "":
         spinner.empty()
         st.rerun()
 
-# MODO IMAGEN (generar desde prompt)
-if True:
-    pass
-# 👇 Este bloque es independiente y solo se ejecuta si el usuario escribió algo
-if st.session_state.imagen_cargada:
-    texto = prompt or "Describe el contenido de esta imagen"
-    imagen = st.session_state.imagen_cargada
-    st.session_state.imagen_cargada = None
-    st.session_state.modo_ocr = False
-    st.session_state.uploader_key += 1
+    # MODO IMAGEN (solo texto para generar imagen)
+    elif st.session_state.modo_generacion == "imagen":
+        if st.session_state.active_chat_id is None:
+            new_chat_id = str(time.time())
+            st.session_state.active_chat_id = new_chat_id
+            st.session_state.chats[new_chat_id] = {
+                "name": generate_chat_name(prompt),
+                "messages": []
+            }
 
-    if st.session_state.active_chat_id is None:
-        new_chat_id = str(time.time())
-        st.session_state.active_chat_id = new_chat_id
-        st.session_state.chats[new_chat_id] = {
-            "name": generate_chat_name(texto),
-            "messages": []
-        }
+        chat_id = st.session_state.active_chat_id
+        if chat_id not in st.session_state.chats:
+            st.session_state.chats[chat_id] = {
+                "name": generate_chat_name(prompt),
+                "messages": []
+            }
 
-    chat_id = st.session_state.active_chat_id
-    if chat_id not in st.session_state.chats:
-        st.session_state.chats[chat_id] = {
-            "name": generate_chat_name(texto),
-            "messages": []
-        }
+        st.session_state.chats[chat_id]["messages"].append({"role": "user", "content": prompt})
 
-    buffer = io.BytesIO(imagen.read())
-    st.session_state.chats[chat_id]["messages"].append({
-        "role": "user",
-        "content": f"{texto}",
-        "image_bytes": buffer.getvalue()
-    })
+        with chat_container:
+            imagen_placeholder = st.empty()
+            with imagen_placeholder.container():
+                st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Generando imagen... Esto puede tardar de 1 a 3 minutos.</div></div>", unsafe_allow_html=True)
 
-    # Mostrar analizando
-    with chat_container:
-        spinner = st.empty()
-        with spinner.container():
-            st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
+        try:
+            imagen = generar_imagen_flux(prompt, st.secrets["HUGGINGFACE_API_TOKEN"])
+            buffer = io.BytesIO()
+            imagen.save(buffer, format="PNG")
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": "Aquí está tu imagen:",
+                "image_bytes": buffer.getvalue()
+            })
+        except Exception as e:
+            st.session_state.chats[chat_id]["messages"].append({
+                "role": "assistant",
+                "content": f"❌ Error generando imagen: {e}"
+            })
 
-    try:
-        headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-        imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-        data = {
-            "image": imagen_base64,
-            "query": texto
-        }
-        response = requests.post(
-            "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base",
-            headers=headers,
-            json=data
-        )
-        if response.ok:
-            result = response.json()
-            respuesta_ocr = result.get("generated_text", result.get("caption", "❌ No se pudo generar descripción."))
-        else:
-            respuesta_ocr = f"❌ Error HTTP {response.status_code}: {response.reason}"
-    except Exception as e:
-        respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
+        imagen_placeholder.empty()
+        st.rerun()
 
-    st.session_state.chats[chat_id]["messages"].append({
-        "role": "assistant",
-        "content": respuesta_ocr
-    })
-
-    spinner.empty()
-    st.session_state["upload_imagen"] = None
-    st.rerun()
-
-    # ✅ MODO TEXTO NORMAL
+    # MODO TEXTO NORMAL
     elif st.session_state.modo_generacion == "texto":
         if st.session_state.active_chat_id is None:
             new_chat_id = str(time.time())
