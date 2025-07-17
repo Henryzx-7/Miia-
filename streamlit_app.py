@@ -4,6 +4,15 @@ import time
 import random
 from PIL import Image
 import requests, base64, io
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+
+@st.cache_resource
+def cargar_modelo_ocr():
+    processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
+    model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
+    return processor, model
+
+processor_ocr, modelo_ocr = cargar_modelo_ocr()
 
 def generar_imagen_flux(prompt, token):
     headers = {"Authorization": f"Bearer {token}"}
@@ -296,24 +305,23 @@ if prompt is not None and prompt.strip() != "":
                 st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
         try:
-            headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-            imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-            data = {
-                "image": imagen_base64,
-                "query": texto or "Describe el contenido de esta imagen"
+            headers = {
+                "Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}",
+                "Accept": "application/json"
             }
 
+            image_bytes = buffer.getvalue()
+
             response = requests.post(
-                "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
+                "https://api-inference.huggingface.co/models/microsoft/trocr-base-handwritten",
                 headers=headers,
-                json=data
+                data=image_bytes
             )
 
             if response.ok:
-                respuesta_json = response.json()
-                respuesta_ocr = respuesta_json[0].get("generated_text", "⚠️ No se encontró el texto generado.") 
+                respuesta_ocr = response.json().get("generated_text", "❌ No se pudo analizar la imagen.")
             else:
-                respuesta_ocr = f"❌ Error HTTP {response.status_code}: {response.text}"
+                respuesta_ocr = f"❌ Error HTTP {response.status_code}: {response.reason}"
 
         except Exception as e:
             respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
