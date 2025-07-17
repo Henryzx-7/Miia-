@@ -301,15 +301,21 @@ if prompt is not None and prompt.strip() != "":
                 "file": ("imagen.jpg", buffer.getvalue(), "image/jpeg")
             }
             response = requests.post(
-                "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base",
+                "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
                 headers=headers,
-                files=files
+                json=data
             )
-            if response.ok:
-                respuesta_ocr = response.json()[0].get("generated_text", "❌ No se pudo analizar la imagen.")
+
+# NUEVO DEBUG: muestra la respuesta completa
+            if response.status_code != 200:
+                respuesta_ocr = f"❌ Error {response.status_code}: {response.text}"
             else:
-                respuesta_ocr = "❌ La API no devolvió respuesta válida."
-        except Exception as e:
+                try:
+                   respuesta_json = response.json()
+                   respuesta_ocr = respuesta_json.get("generated_text", "⚠️ No se encontró el texto generado.")
+               except Exception as e:
+                   respuesta_ocr = f"❌ Error al interpretar la respuesta: {e}\nContenido bruto: {response.text}"
+               except Exception as e:
             respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
 
         st.session_state.chats[chat_id]["messages"].append({
