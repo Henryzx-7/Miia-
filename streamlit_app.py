@@ -315,8 +315,6 @@ if prompt is not None and prompt.strip() != "":
                    respuesta_ocr = respuesta_json.get("generated_text", "⚠️ No se encontró el texto generado.")
          except Exception as e:
                    respuesta_ocr = f"❌ Error al interpretar la respuesta: {e}\nContenido bruto: {response.text}"
-         except Exception as e:
-            respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
 
         st.session_state.chats[chat_id]["messages"].append({
             "role": "assistant",
