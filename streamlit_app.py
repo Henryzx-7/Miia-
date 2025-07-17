@@ -311,7 +311,7 @@ if prompt is not None and prompt.strip() != "":
 
             if response.ok:
                 respuesta_json = response.json()
-                respuesta_ocr = respuesta_json.get("generated_text", "❌ No se pudo analizar la imagen.")
+                respuesta_ocr = respuesta_json[0].get("generated_text", "⚠️ No se encontró el texto generado.") 
             else:
                 respuesta_ocr = f"❌ Error HTTP {response.status_code}: {response.text}"
 
