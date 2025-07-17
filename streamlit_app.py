@@ -296,19 +296,27 @@ if prompt is not None and prompt.strip() != "":
                 st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
         try:
-            headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-            files = {
-                "file": ("imagen.jpg", buffer.getvalue(), "image/jpeg")
-            }
-            response = requests.post(
-                "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
-                headers=headers,
-                json=data
-            )
+    headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
+    imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    data = {
+        "image": imagen_base64,
+        "query": texto or "Describe el contenido de esta imagen"
+    }
 
-# NUEVO DEBUG: muestra la respuesta completa
-            if response.status_code != 200:
-                respuesta_ocr = f"❌ Error {response.status_code}: {response.text}"
+    response = requests.post(
+        "https://api-inference.huggingface.co/models/ChatDOC/OCRFlux-3B",
+        headers=headers,
+        json=data
+    )
+
+    if response.ok:
+        respuesta_json = response.json()
+        respuesta_ocr = respuesta_json.get("generated_text", "❌ No se pudo analizar la imagen.")
+    else:
+        respuesta_ocr = f"❌ Error HTTP {response.status_code}: {response.text}"
+
+except Exception as e:
+    respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
             else:
                 try:
                    respuesta_json = response.json()
