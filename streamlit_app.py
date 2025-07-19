@@ -6,6 +6,10 @@ from PIL import Image
 import requests, base64, io
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 
+llava_processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+llava_model = AutoModelForVision2Seq.from_pretrained("llava-hf/llava-1.5-7b-hf")
+llava_model.eval()
+
 @st.cache_resource
 def cargar_modelo_ocr():
     processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
@@ -28,35 +32,11 @@ def generar_imagen_flux(prompt, token):
     image = Image.open(io.BytesIO(response.content))
     return image
 
-def analizar_imagen_con_blackbox(image_bytes, prompt):
-    import base64
-    url = "https://api.blackbox.ai/chat/completions"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {st.secrets['BLACKBOX_API_KEY']}"
-    }
-
-    imagen_base64 = base64.b64encode(image_bytes).decode("utf-8")
-    data_url = f"data:image/jpeg;base64,{imagen_base64}"
-
-    data = {
-        "model": "blackboxai/openai/gpt-4-vision",
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": data_url}}
-                ]
-            }
-        ]
-    }
-
-    response = requests.post(url, headers=headers, json=data)
-    if response.status_code != 200:
-        raise Exception(f"Error {response.status_code}: {response.text}")
-    
-    return response.json()["choices"][0]["message"]["content"]
+def analizar_imagen_con_llava(image_bytes, prompt):
+    client = InferenceClient(model="llava-hf/llava-1.6-mistral-7b-hf")
+    image_pil = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    respuesta = client.text_to_image(prompt=prompt, image=image_pil)
+    return respuesta
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
@@ -365,7 +345,7 @@ if prompt or st.session_state.imagen_cargada:
                 st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
         try:
-            respuesta_ocr = analizar_imagen_con_blackbox(buffer.getvalue(), texto)
+            respuesta_ocr = analizar_imagen_con_llava(buffer.getvalue(), texto)
         except Exception as e:
             respuesta_ocr = f"❌ Error al usar BlackboxIA: {e}"
 
