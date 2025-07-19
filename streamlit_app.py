@@ -5,6 +5,7 @@ import random
 from PIL import Image
 import requests, base64, io
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+from transformers import AutoProcessor, AutoModelForVision2Seq
 
 llava_processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 llava_model = AutoModelForVision2Seq.from_pretrained("llava-hf/llava-1.5-7b-hf")
@@ -35,7 +36,7 @@ def generar_imagen_flux(prompt, token):
 def analizar_imagen_con_llava(image_bytes, prompt):
     client = InferenceClient(model="llava-hf/llava-1.6-mistral-7b-hf")
     image_pil = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    respuesta = client.text_to_image(prompt=prompt, image=image_pil)
+    respuesta = client.text_to_text(prompt=prompt, image=image_pil)
     return respuesta
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
