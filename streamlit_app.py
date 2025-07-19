@@ -350,11 +350,11 @@ if prompt or st.session_state.imagen_cargada:
             with spinner.container():
                 st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
-         try:
+        try:
             respuesta_ocr = analizar_imagen_con_blackbox(buffer.getvalue(), texto)
         except Exception as e:
             respuesta_ocr = f"❌ Error al usar BlackboxIA: {e}"
-        
+
         st.session_state.chats[chat_id]["messages"].append({
             "role": "assistant",
             "content": respuesta_ocr
