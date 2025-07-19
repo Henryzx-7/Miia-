@@ -14,6 +14,20 @@ def cargar_modelo_ocr():
 
 processor_ocr, modelo_ocr = cargar_modelo_ocr()
 
+def generar_imagen_flux(prompt, token):
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"inputs": prompt}  # 👈 aquí está el cambio importante
+    response = requests.post(
+        "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev",
+        headers=headers,
+        json=payload
+    )
+    if response.status_code != 200:
+        raise Exception(f"Error en la API: {response.status_code} - {response.text}")
+    
+    image = Image.open(io.BytesIO(response.content))
+    return image
+
 def analizar_imagen_con_blackbox(image_bytes, prompt):
     import base64
     url = "https://api.blackbox.ai/chat/completions"
