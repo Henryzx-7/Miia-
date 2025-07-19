@@ -14,20 +14,35 @@ def cargar_modelo_ocr():
 
 processor_ocr, modelo_ocr = cargar_modelo_ocr()
 
-def generar_imagen_flux(prompt, token):
-    headers = {"Authorization": f"Bearer {token}"}
-    payload = {"inputs": prompt}  # 👈 aquí está el cambio importante
-    response = requests.post(
-        "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev",
-        headers=headers,
-        json=payload
-    )
-    if response.status_code != 200:
-        raise Exception(f"Error en la API: {response.status_code} - {response.text}")
-    
-    image = Image.open(io.BytesIO(response.content))
-    return image
+def analizar_imagen_con_blackbox(image_bytes, prompt):
+    import base64
+    url = "https://api.blackbox.ai/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {st.secrets['BLACKBOX_API_KEY']}"
+    }
 
+    imagen_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    data_url = f"data:image/jpeg;base64,{imagen_base64}"
+
+    data = {
+        "model": "blackboxai/openai/gpt-4-vision",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": data_url}}
+                ]
+            }
+        ]
+    }
+
+    response = requests.post(url, headers=headers, json=data)
+    if response.status_code != 200:
+        raise Exception(f"Error {response.status_code}: {response.text}")
+    
+    return response.json()["choices"][0]["message"]["content"]
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="HEX T 1.0", page_icon="🤖", layout="wide")
 
@@ -335,27 +350,11 @@ if prompt or st.session_state.imagen_cargada:
             with spinner.container():
                 st.markdown("<div class='message-container bot-container'><div class='thinking-animation'>Analizando imagen…</div></div>", unsafe_allow_html=True)
 
-        try:
-            headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_TOKEN']}"}
-            imagen_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
-            data = {
-                "image": imagen_base64,
-                "query": texto
-            }
-            response = requests.post(
-                "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base",
-                headers=headers,
-                json=data
-            )
-            if response.ok:
-                respuesta_json = response.json()
-                respuesta_ocr = respuesta_json.get("generated_text", "❌ No se pudo analizar la imagen.")
-            else:
-                respuesta_ocr = f"❌ Error HTTP {response.status_code}: {response.reason}"
-
+         try:
+            respuesta_ocr = analizar_imagen_con_blackbox(buffer.getvalue(), texto)
         except Exception as e:
-            respuesta_ocr = f"❌ Error al procesar la imagen: {e}"
-
+            respuesta_ocr = f"❌ Error al usar BlackboxIA: {e}"
+        
         st.session_state.chats[chat_id]["messages"].append({
             "role": "assistant",
             "content": respuesta_ocr
